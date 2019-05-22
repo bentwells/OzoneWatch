@@ -20,7 +20,6 @@ dv.tables <- function(naaqs,type,geo,region,state,out) {
   
   ## Set variables based on geo input
   area.type <- switch(substr(geo,1,3),Sta="county",Cor="cbsa",Com="csa",Non="naa")
-  if (std == "2015" & area.type == "naa") { return() }
   name.col <- paste(area.type,"name",sep="_")
   fix.areas <- ifelse(type == "Area-level Design Values",ifelse(area.type == "county",
     FALSE,TRUE),ifelse(out == "All Sites",FALSE,ifelse(area.type == "county",FALSE,TRUE)))
@@ -37,10 +36,6 @@ dv.tables <- function(naaqs,type,geo,region,state,out) {
     
     ## Generate additional columns and set column names for area-level tables
     vals$meets_naaqs <- sapply(vals[,dv.col],function(x) ifelse(x > lvl,"No","Yes"))
-    vals[,paste("critical",years[3],sep="_")] <- 3*(lvl+1) - 
-      vals[,paste("max4",years[2],sep="_")] - vals[,paste("max4",years[1],sep="_")]
-    vals[,paste("critical",years[3]+1,sep="_")] <- 3*(lvl+1) - 
-      vals[,paste("max4",years[3],sep="_")] - vals[,paste("max4",years[2],sep="_")]
     val.cols <- c(dv.col,"meets_naaqs",paste("max4",years[1:3],sep="_"),
       paste("critical",years[2:3]+1,sep="_"))
     cnames <- c(paste("Preliminary",years[1],"-",years[3],"Design Value (ppb)"),

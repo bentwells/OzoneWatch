@@ -65,17 +65,11 @@ max4.plot <- function(naaqs,geo,state,out) {
     title1 <- paste(out,"CSA")
   }
   if (geo == "Nonattainment Area (NAA)") {
-    if (std == "2015") { return() }
     curr <- curr.data[sapply(curr.data,function(x) x$naa_name == out)]
     hist <- hist.data[sapply(hist.data,function(x) x$naa_name == out)]
     vals <- subset(vals,naa_name == out)
     title1 <- paste(out,"Nonattainment Area")
   }
-
-  ## Get critical value based on current high DV site
-  vals$critical <- 3*(lvl+1) - vals[,paste("max4",dv.year-1,sep="_")] - 
-    vals[,paste("max4",dv.year-2,sep="_")]
-  cval <- vals$critical[which.min(vals$critical-vals[,paste("max4",dv.year,sep="_")])]
   
   ## Create current year 4th max time series
   if (length(curr) == 0) { 
@@ -117,12 +111,13 @@ max4.plot <- function(naaqs,geo,state,out) {
   }
   
   ## Generate cumulative 4th max plot
-  par(mar=c(2,4,2,0.5),mgp=c(2.4,0.8,0),cex.axis=1.5,cex.lab=1.5,cex.main=1.4)
-  plot(x=NULL,y=NULL,xaxt='n',xlim=c(0,366),xaxs="i",xlab="",ylim=c(0,120),yaxs="i",
-    ylab="Annual 4th Highest Daily Maximum Value (ppb)",main=paste(title1,title2,sep=" - "))
+  cval <- min(c(vals[,paste("critical",dv.year,sep="_")],120),na.rm=TRUE)
   x.ticks <- c(0,cumsum(table(substr(max4plot.vals$day,1,2))))
   x.midpt <- x.ticks[1:12] + (x.ticks[2:13] - x.ticks[1:12])/2
   lab.ht <- 2.5+c(10,5,0)
+  par(mar=c(2,4,2,0.5),mgp=c(2.4,0.8,0),cex.axis=1.5,cex.lab=1.5,cex.main=1.4)
+  plot(x=NULL,y=NULL,xaxt='n',xlim=c(0,366),xaxs="i",xlab="",ylim=c(0,120),yaxs="i",
+    ylab="Annual 4th Highest Daily Maximum Value (ppb)",main=paste(title1,title2,sep=" - "))
   polygon(x=par("usr")[c(1,2,2,1)],y=par("usr")[c(3,3,4,4)],col="#E0E0E0")
   abline(h=seq(0,120,10),v=x.ticks,col="#FFFFFF")
   if (length(hist) > 0) {

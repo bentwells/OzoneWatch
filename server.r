@@ -1,6 +1,7 @@
 ##########################################################
 ## Server function for the Ozone Watch R shiny application
 ##########################################################
+setwd("D:/OzoneWatch/")
 options(stringsAsFactors=FALSE)
 require(shiny,quietly=TRUE,warn.conflicts=FALSE)
 require(DT,quietly=TRUE,warn.conflicts=FALSE)
@@ -23,34 +24,17 @@ shinyServer(function(input,output) {
       selected="Area-level Design Values")
   })
   
-  ## Create an Ozone NAAQS selection input
-  output$ui.naaqs <- renderUI({
-    if (is.null(input$app.select)) { return() }
-    naaqs.default <- "2015 8-hour (70 ppb)"
-    if (grepl("Design Value",input$app.select)) {
-      naaqs.default <- "2008 8-hour (75 ppb)"
-    }
-    selectInput(inputId="naaqs.select",label="Select an Ozone NAAQS:",
-      choices=c("2015 8-hour (70 ppb)","2008 8-hour (75 ppb)","1997 8-hour (84 ppb)"),
-      selected=naaqs.default)
-  })
-  
   ## Create a geography selection input
   output$ui.geo <- renderUI({
     if (is.null(input$app.select)) { return() }
     if (is.null(input$naaqs.select)) { return() }
     geo.choices <- c("AQS Site ID","State/County","Core Based Statistical Area (CBSA)",
       "Combined Statistical Area (CSA)","Nonattainment Area (NAA)")
-    geo.default <- "Nonattainment Area (NAA)"
     if (grepl("Design Value",input$app.select)) {
       geo.choices <- geo.choices[geo.choices != "AQS Site ID"]
     }
-    if (input$naaqs.select == "2015 8-hour (70 ppb)") {
-      geo.choices <- geo.choices[geo.choices != "Nonattainment Area (NAA)"]
-      geo.default <- "State/County"
-    }
     selectInput(inputId="geo.select",label="Select a Geographic Area Type:",
-      choices=geo.choices,selected=geo.default)
+      choices=geo.choices,selected="Nonattainment Area (NAA)")
   })
   
   ## Create a state selection input
@@ -128,7 +112,6 @@ shinyServer(function(input,output) {
     }
     ## NAA-level selection
     if (input$geo.select == "Nonattainment Area (NAA)") {
-      if (naaqs == "2015") { return() }
       out.label <- "Select a NAA:"
       vals <- subset(sites,naa_name != " " & !duplicated(naa_name),"naa_name")
       out.choices <- vals$naa_name[order(vals$naa_name)]
@@ -214,7 +197,7 @@ shinyServer(function(input,output) {
         region=input$region.select,state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("dv.tables")) { source("dvtables.r",local=sys.frame(0)) }
+      if (!exists("dv.tables")) { source("shinyApp/dvtables.r",local=sys.frame(0)) }
       table.out <- dv.tables(naaqs=inputs$naaqs,type=inputs$type,geo=inputs$geo,
         region=inputs$region,state=inputs$state,out=inputs$out)
       area.col <- grep("Area",colnames(table.out))-1
@@ -244,7 +227,7 @@ shinyServer(function(input,output) {
         value=input$value.select)
     })
     withProgress({
-      if (!exists("area.maps")) { source("areamaps.r",local=sys.frame(0)) }
+      if (!exists("area.maps")) { source("shinyApp/areamaps.r",local=sys.frame(0)) }
       area.maps(naaqs=inputs$naaqs,type=inputs$type,geo=inputs$geo,region=inputs$region,
         state=inputs$state,out=inputs$out,value=inputs$value)
     },message="Loading...",value=NULL,detail=NULL)
@@ -258,7 +241,7 @@ shinyServer(function(input,output) {
         state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("max4.plot")) { source("max4plot.r",local=sys.frame(0)) }
+      if (!exists("max4.plot")) { source("shinyApp/max4plot.r",local=sys.frame(0)) }
       max4.plot(naaqs=inputs$naaqs,geo=inputs$geo,state=inputs$state,out=inputs$out)
     },message="Loading...",value=NULL,detail=NULL)
   },width=960,height=720)
@@ -271,7 +254,7 @@ shinyServer(function(input,output) {
         state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("tile.plot")) { source("tileplot.r",local=sys.frame(0)) }
+      if (!exists("tile.plot")) { source("shinyApp/tileplot.r",local=sys.frame(0)) }
       tile.plot(naaqs=inputs$naaqs,geo=inputs$geo,state=inputs$state,out=inputs$out)
     },message="Loading...",value=NULL,detail=NULL)
   },width=960,height=720)
@@ -292,7 +275,6 @@ shinyServer(function(input,output) {
     area.type <- switch(substr(input$geo.select,1,3),
       Sta="county",Cor="cbsa",Com="csa",Non="naa")
     area.title <- ifelse(area.type == "county","County",toupper(area.type))
-    if (naaqs == "2015" & area.type == "naa") { return() }
     name.col <- paste(area.type,"name",sep="_")
     
     ## Hover text for area-level design values
@@ -415,13 +397,16 @@ shinyServer(function(input,output) {
     col <- year - as.numeric(substr(colnames(tileplot.vals)[2],1,4)) + 2
     date <- paste(tileplot.vals$day[row],year,sep="-")
     ppb.val <- tileplot.vals[row,col]
-    hi <- which(aqi.breaks > ppb.val)[1]
-    lo <- sum(aqi.breaks < ppb.val)
-    aqi.val <- round((aqi.vals[hi] - aqi.vals[lo])/(aqi.breaks[hi] - aqi.breaks[lo]) *
-      (ppb.val - aqi.breaks[lo]) + aqi.vals[lo])
+    aqi.break <- sum(aqi.breaks < ppb.val)
+    aqi.val <- round((aqi.vals[(aqi.break + 1)] - aqi.vals[aqi.break]) / 
+      (aqi.breaks[(aqi.break + 1)] - aqi.breaks[aqi.break]) *
+      (ppb.val - aqi.breaks[aqi.break]) + aqi.vals[aqi.break])
     out1 <- paste(char1,ifelse(length(date) > 0,date,""))
     out2 <- paste(char2,ifelse(length(aqi.val) > 0,aqi.val,""))
     out3 <- paste(char3,ifelse(length(ppb.val) > 0,ppb.val,""))
     return(cat(out1,out2,out3,sep="\n"))
   })
+  
+  ## Clear global workspace upon exit
+  onSessionEnded(function() { rm(list=ls(),envir=sys.frame(0)) })
 })

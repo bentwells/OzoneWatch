@@ -1,6 +1,7 @@
 ######################################################
 ## UI function for the Ozone Watch R shiny application
 ######################################################
+setwd("D:/OzoneWatch/")
 options(stringsAsFactors=FALSE)
 require(shiny,quietly=TRUE,warn.conflicts=FALSE)
 require(DT,quietly=TRUE,warn.conflicts=FALSE)
@@ -67,7 +68,9 @@ shinyUI(fluidPage(title="Ozone Watch",
         "Cumulative 4th Max Plots","Daily AQI Tile Plots"),
       selected="Design Value Tables"),
     uiOutput("ui.type"),
-    uiOutput("ui.naaqs"),
+    selectInput(inputId="naaqs.select",label="Select an Ozone NAAQS:",
+      choices=c("2015 8-hour (70 ppb)","2008 8-hour (75 ppb)","1997 8-hour (84 ppb)"),
+      selected="2015 8-hour (70 ppb)"),
     uiOutput("ui.geo"),
     selectInput(inputId="region.select",label="Select an EPA Region:",
       choices=c("National",paste("EPA Region",c(1:10))),

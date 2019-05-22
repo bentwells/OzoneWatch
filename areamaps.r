@@ -13,7 +13,7 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
   }
   
   ## Get source code for mapping functions, add packages
-  source("rmapfuns.r",local=sys.frame(0))
+  source("shinyApp/rmapfuns.r",local=sys.frame(0))
   require(shapefiles,quietly=TRUE,warn.conflicts=FALSE)
   require(sp,quietly=TRUE,warn.conflicts=FALSE)
   
@@ -32,7 +32,6 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
   ## Set constants based on geo input
   area.type <- switch(substr(geo,1,3),Sta="county",Cor="cbsa",Com="csa",Non="naa")
   area.title <- ifelse(area.type == "county","County",toupper(area.type))
-  if (std == "2015" & area.type == "naa") { return() }
   name.col <- paste(area.type,"name",sep="_")
   vals <- vals[,c("site","site_name","address","latitude","longitude",
     "epa_region","state_name",name.col,val.cols)]
@@ -51,7 +50,7 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
     }
     assign("naa.dbf",eval(parse(text=paste("naa.dbf",std,sep="."))))
     assign("naa.shape",eval(parse(text=paste("naa.shape",std,sep="."))))
-    naa.info <- data.frame(fips=c(1:nrow(naa.dbf)),name=naa.dbf$AREA_NAME)
+    naa.info <- data.frame(fips=c(1:nrow(naa.dbf)),name=naa.dbf$area_name)
   }
   
   ## Get list of states to draw based on region and state inputs, for non-local maps

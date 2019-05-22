@@ -57,7 +57,6 @@ tile.plot <- function(naaqs,geo,state,out) {
     title1 <- paste(out,"CSA")
   }
   if (geo == "Nonattainment Area (NAA)") {
-    if (std == "2015") { return() }
     curr <- curr.data[sapply(curr.data,function(x) x$naa_name == out)]
     hist <- hist.data[sapply(hist.data,function(x) x$naa_name == out)]
     title1 <- paste(out,"Nonattainment Area")
