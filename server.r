@@ -1,7 +1,6 @@
 ##########################################################
 ## Server function for the Ozone Watch R shiny application
 ##########################################################
-setwd("D:/OzoneWatch/")
 options(stringsAsFactors=FALSE)
 require(shiny,quietly=TRUE,warn.conflicts=FALSE)
 require(DT,quietly=TRUE,warn.conflicts=FALSE)
@@ -197,7 +196,7 @@ shinyServer(function(input,output) {
         region=input$region.select,state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("dv.tables")) { source("shinyApp/dvtables.r",local=sys.frame(0)) }
+      if (!exists("dv.tables")) { source("dvtables.r",local=sys.frame(0)) }
       table.out <- dv.tables(naaqs=inputs$naaqs,type=inputs$type,geo=inputs$geo,
         region=inputs$region,state=inputs$state,out=inputs$out)
       area.col <- grep("Area",colnames(table.out))-1
@@ -227,7 +226,7 @@ shinyServer(function(input,output) {
         value=input$value.select)
     })
     withProgress({
-      if (!exists("area.maps")) { source("shinyApp/areamaps.r",local=sys.frame(0)) }
+      if (!exists("area.maps")) { source("areamaps.r",local=sys.frame(0)) }
       area.maps(naaqs=inputs$naaqs,type=inputs$type,geo=inputs$geo,region=inputs$region,
         state=inputs$state,out=inputs$out,value=inputs$value)
     },message="Loading...",value=NULL,detail=NULL)
@@ -241,7 +240,7 @@ shinyServer(function(input,output) {
         state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("max4.plot")) { source("shinyApp/max4plot.r",local=sys.frame(0)) }
+      if (!exists("max4.plot")) { source("max4plot.r",local=sys.frame(0)) }
       max4.plot(naaqs=inputs$naaqs,geo=inputs$geo,state=inputs$state,out=inputs$out)
     },message="Loading...",value=NULL,detail=NULL)
   },width=960,height=720)
@@ -254,7 +253,7 @@ shinyServer(function(input,output) {
         state=input$state.select,out=input$out.select)
     })
     withProgress({
-      if (!exists("tile.plot")) { source("shinyApp/tileplot.r",local=sys.frame(0)) }
+      if (!exists("tile.plot")) { source("tileplot.r",local=sys.frame(0)) }
       tile.plot(naaqs=inputs$naaqs,geo=inputs$geo,state=inputs$state,out=inputs$out)
     },message="Loading...",value=NULL,detail=NULL)
   },width=960,height=720)
