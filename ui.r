@@ -1,7 +1,6 @@
 ######################################################
 ## UI function for the Ozone Watch R shiny application
 ######################################################
-setwd("D:/OzoneWatch/")
 options(stringsAsFactors=FALSE)
 require(shiny,quietly=TRUE,warn.conflicts=FALSE)
 require(DT,quietly=TRUE,warn.conflicts=FALSE)
