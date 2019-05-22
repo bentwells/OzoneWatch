@@ -13,7 +13,7 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
   }
   
   ## Get source code for mapping functions, add packages
-  source("shinyApp/rmapfuns.r",local=sys.frame(0))
+  source("rmapfuns.r",local=sys.frame(0))
   require(shapefiles,quietly=TRUE,warn.conflicts=FALSE)
   require(sp,quietly=TRUE,warn.conflicts=FALSE)
   
