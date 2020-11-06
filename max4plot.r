@@ -8,32 +8,15 @@ max4.plot <- function(naaqs,geo,state,out) {
   if (is.null(out)) { return() }
   if (out == "Please make a selection!") { return() }
   
-  ## Sub-functions called within main function
-  max.na <- function(x) { return(ifelse(all(is.na(x)),NA,max(x,na.rm=TRUE))) }
-  med.na <- function(x) { return(ifelse(all(is.na(x)),NA,median(x,na.rm=TRUE))) }
-  min.na <- function(x) { return(ifelse(all(is.na(x)),NA,min(x,na.rm=TRUE))) }
-  cummax.na <- function(x) { 
-    not.na <- which(!is.na(x))
-    x[not.na] <- cummax(x[not.na])
-    return(x)
-  }
-  
-  ## Load required packages, set options and constants based on naaqs input
-  require(chron,quietly=TRUE,warn.conflicts=FALSE)
-  require(plyr,quietly=TRUE,warn.conflicts=FALSE)
-  require(reshape2,quietly=TRUE,warn.conflicts=FALSE)
-  options(chron.year.abb=FALSE)
+  ## Set constants based on naaqs input
   std <- substr(naaqs,1,4)
   lvl <- ifelse(std == "2015",70,ifelse(std == "2008",75,84))
   vals <- eval(parse(text=paste("sitedv",std,sep=".")))
-  dv.year <- as.numeric(substr(colnames(vals)[grep("dv",colnames(vals))],9,12))
   title2 <- paste(std," Ozone NAAQS (",lvl," ppb)",sep="")
   
   ## Get current year and historical data based on naaqs input
-  files <- list.files("data")
   curr.file <- paste("data",rev(files[grep("daily",files)])[1],sep="/")
   hist.file <- paste("data",rev(files[grep(paste("hist",std,sep="_"),files)])[1],sep="/")
-  update.date <- chron(gsub("data/daily_","",gsub(".Rdata","",curr.file)),format="ymd")
   if (!exists(paste("curr",std,sep="."))) { load(curr.file,envir=sys.frame(0)) }
   if (!exists(paste("hist",std,sep="."))) { load(hist.file,envir=sys.frame(0)) }
   curr.data <- eval(parse(text=paste("curr",std,sep=".")))
@@ -73,18 +56,18 @@ max4.plot <- function(naaqs,geo,state,out) {
   
   ## Create current year 4th max time series
   if (length(curr) == 0) { 
-    dates <- chron(seq.dates(paste("01/01",dv.year,sep="/"),
-      paste("12/31",dv.year,sep="/")),out.format="y-m-d")
+    dates <- seq(from=as.Date(paste(curr.year,"01-01",sep="-")),
+      to=as.Date(paste(curr.year,"12-31",sep="-")),by=1)
     temp <- data.frame(day=substr(dates,6,10),max4=NA)
   }
   if (length(curr) > 0) {
-    temp <- ldply(curr,function(x) rbind(x$data))
+    temp <- ldply(curr,function(x) rbind(x$daily_data))
     temp <- recast(temp,day ~ site + variable,
       id.var=c("site","day"),measure.var="max4")
     temp$max4 <- apply(as.matrix(temp[,grep("max4",colnames(temp))]),1,max.na)
     if (nrow(temp) < 366) { temp <- rbind(temp[1:59,],temp[59,],temp[60:nrow(temp),]) }
-    if (years(update.date) == dv.year) {
-      today <- paste(substr(update.date,5,6),substr(update.date,7,8),sep="-")
+    if (this.year) {
+      today <- paste(substr(curr.date,6,7),substr(curr.date,9,10),sep="-")
       curr.row <- match(today,temp$day)
       temp$max4[curr.row:nrow(temp)] <- NA
     }
@@ -94,7 +77,7 @@ max4.plot <- function(naaqs,geo,state,out) {
   ## Create historical 4th max time series
   if (length(hist) == 0) { assign("max4plot.vals",curr.vals,envir=sys.frame(0)) }
   if (length(hist) > 0) {
-    temp <- ldply(hist,function(x) rbind(x$data))
+    temp <- ldply(hist,function(x) rbind(x$daily_data))
     temp <- recast(temp,year + day ~ site + variable,
       id.var=c("site","year","day"),measure.var="max4")
     temp$max4 <- apply(as.matrix(temp[,grep("max4",colnames(temp))]),1,max.na)
@@ -111,7 +94,7 @@ max4.plot <- function(naaqs,geo,state,out) {
   }
   
   ## Generate cumulative 4th max plot
-  cval <- min(c(vals[,paste("critical",dv.year,sep="_")],120),na.rm=TRUE)
+  cval <- min(c(vals[,paste("critical",curr.year,sep="_")],120),na.rm=TRUE)
   x.ticks <- c(0,cumsum(table(substr(max4plot.vals$day,1,2))))
   x.midpt <- x.ticks[1:12] + (x.ticks[2:13] - x.ticks[1:12])/2
   lab.ht <- 2.5+c(10,5,0)
@@ -140,7 +123,7 @@ max4.plot <- function(naaqs,geo,state,out) {
     lines(x=seq(0.5,nrow(max4plot.vals)-0.5,1),y=max4plot.vals$max4,col="#00AA00",lwd=2)
     segments(x0=rep(215,3),x1=rep(240,3),y0=lab.ht,y1=lab.ht,
       lty=c(2,1,1),lwd=2,col=c("#000000","#00AA00","#FF5555"))
-    text(labels=c("NAAQS Level",paste(dv.year,c("Observed","Critical Value"))),
+    text(labels=c("NAAQS Level",paste(curr.year,c("Observed","Critical Value"))),
       x=215,y=lab.ht,pos=2,cex=1.5)
   }
   box()

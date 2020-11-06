@@ -108,10 +108,6 @@ draw.map <- function(type="state",x,id="fips",add=FALSE,hires=FALSE,
 ##
 ## Arguments:
 ##
-## shapefile - name of file ("path/shapefile.shp") containing points, lines,
-##   or polygons to be plotted or output. If specified, 'type', 'x', 'y',
-##   and 'id' are determined internally.
-##
 ## type - type of layer to be added ("points", "lines", or "polygon").
 ##
 ## x,y - coordinates (e.g. lon,lat) of the points, lines, or polygons.
@@ -143,59 +139,15 @@ draw.map <- function(type="state",x,id="fips",add=FALSE,hires=FALSE,
 ##   'id', 'x', and 'y'.
 ############################################################################
 
-add.layer <- function(shapefile,type,x,y,id,subset,
-  plot=TRUE,rescale=TRUE,proj.args,...) {
-  if (!missing(shapefile)) {
-    require(shapefiles,quietly=TRUE,warn.conflicts=FALSE)
-    require(data.table,quietly=TRUE,warn.conflicts=FALSE)
-    if (!file.exists(shapefile)) {
-      stop("Shapefile not found")
-    }
-    shape.in <- read.shp(shapefile)
-    st <- shape.in$header$shape.type
-    type <- ifelse(st %in% c(1,11),"points",ifelse(st %in% c(3,13),"lines",
-      ifelse(st %in% c(5,15),"polygon",stop("Invalid shapefile type"))))
-    shape <- convert.to.simple(shape.in)
-    if (type == "points") {
-      if (missing(subset)) {
-        subset <- c(1:nrow(shape))
-      }
-      x <- shape$X[subset]
-      y <- shape$Y[subset]
-    }
-    if (type != "points") {
-      if (missing(subset)) {
-        subset <- c(1:max(shape$Id))
-      }
-      shapes <- unique(shape$Id)[subset]
-      temp <- vector("list",max(shape$Id))
-      for (i in shapes) {
-        t <- shape[which(shape$Id == i),]
-        n <- shape.in[[1]][[i]]$num.parts
-        p <- shape.in[[1]][[i]]$parts
-        t$Part <- 1
-        if (n > 1) {
-          for (j in 2:n) {
-            pmin <- p[j] + 1
-            pmax <- ifelse(j < n,p[(j+1)],nrow(t))
-            t$Part[pmin:pmax] <- j
-          }
-        }
-        temp[[i]] <- t[,c("Id","Part","X","Y")]
-      }
-      shape <- data.frame(rbindlist(temp))
-      id <- paste(shape$Id,shape$Part,sep="_")
-      x <- shape$X
-      y <- shape$Y
-    }
-  }
+add.layer <- function(type,x,y,id,subset,plot=TRUE,rescale=TRUE,proj.args,...) {
+
   if (!(tolower(type) %in% c("points","lines","polygon"))) {
     stop("'type' must be one of 'points', 'lines', or 'polygon'")
   }
   if (missing(x) | missing(y)) {
     stop("'x' and 'y' are required arguments")
   }
-  if (missing(shapefile) & !missing(subset)) {
+  if (!missing(subset)) {
     if (missing(id)) {
       x <- x[subset]
       y <- y[subset]
@@ -583,4 +535,3 @@ image.plot <- function (..., add = FALSE, breaks = NULL, nlevel = 64, col = NULL
         invisible()
     }
 }
-

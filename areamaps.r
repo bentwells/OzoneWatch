@@ -1,29 +1,23 @@
 ## Function to display maps of design values based on inputs
-area.maps <- function(naaqs,type,geo,region,state,out,value) {
+area.maps <- function(naaqs,type,geo,region,state,out,year,value) {
   
   ## Exit if any required inputs are missing
   if (is.null(naaqs)) { return() }
   if (is.null(geo)) { return() }
   if (is.null(region)) { return() }
   if (is.null(state)) { return() }
+  if (is.null(year)) { return() }
   if (is.null(value)) { return() }
   if (type == "Site-level Design Values") {
     if (is.null(out)) { return() }
     if (out == "Please select a State first!") { return() }
   }
   
-  ## Get source code for mapping functions, add packages
-  source("rmapfuns.r",local=sys.frame(0))
-  require(shapefiles,quietly=TRUE,warn.conflicts=FALSE)
-  require(sp,quietly=TRUE,warn.conflicts=FALSE)
-  
   ## Get site-level DVs and set constants based on naaqs input
-  files <- list.files("data")
   std <- substr(naaqs,1,4)
   lvl <- ifelse(std == "2015",70,ifelse(std == "2008",75,84))
-  vals <- eval(parse(text=paste("sitedv",std,sep=".")))
-  val.cols <- colnames(vals)[unlist(sapply(c("dv","max4"),grep,x=colnames(vals)))]
-  years <- as.numeric(substr(val.cols[grep("max4",val.cols)],6,9))
+  dv.year <- as.numeric(year); years <- c((dv.year-2):dv.year);
+  val.cols <- c(paste("dv",years[1],years[3],sep="_"),paste("max4",years,sep="_"))
   
   ## Set constants based on type input
   dv.type <- tolower(substr(type,1,4))
@@ -33,8 +27,6 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
   area.type <- switch(substr(geo,1,3),Sta="county",Cor="cbsa",Com="csa",Non="naa")
   area.title <- ifelse(area.type == "county","County",toupper(area.type))
   name.col <- paste(area.type,"name",sep="_")
-  vals <- vals[,c("site","site_name","address","latitude","longitude",
-    "epa_region","state_name",name.col,val.cols)]
   
   ## Set constants based on region and state inputs
   national.map <- ifelse(local.map,FALSE,ifelse(region == "National" & state == "All States",TRUE,FALSE))
@@ -45,25 +37,69 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
   
   ## Get nonattainment area information, if applicable
   if (area.type == "naa") {
-    if (!exists(paste("naa.shape",std,sep="."))) {
-      load(paste("data/O3",std,"naa.Rdata",sep="_"),envir=sys.frame(0))
+    if (!exists(paste("naa.shp",std,sep="."))) {
+      load(paste("data/O3_naa_",std,".Rdata",sep=""),envir=sys.frame(0))
     }
     assign("naa.dbf",eval(parse(text=paste("naa.dbf",std,sep="."))))
-    assign("naa.shape",eval(parse(text=paste("naa.shape",std,sep="."))))
-    naa.info <- data.frame(fips=c(1:nrow(naa.dbf)),name=naa.dbf$area_name)
+    assign("naa.shp",eval(parse(text=paste("naa.shp",std,sep="."))))
   }
   
   ## Get list of states to draw based on region and state inputs, for non-local maps
-  map.states <- draw.map("state",plot=FALSE)
+  map.states <- draw.map("state",hires=hi.res,plot=FALSE)
+  temp <- eval(parse(text=paste("sitedv",std,sep=".")))
   if (!local.map) {
     if (region != "National" & state == "All States") {
-      map.states$epa.region <- vals$epa_region[which(!duplicated(vals$state_name))]
-      map.states <- subset(map.states,epa.region == substr(region,12,13))
+      map.states$epa_region <- temp$epa_region[which(!duplicated(temp$state_name))]
+      map.states <- subset(map.states,epa_region == substr(region,12,13))
       if (region == "EPA Region 2") { map.states <- subset(map.states,name != "Puerto Rico") }
       if (region == "EPA Region 9") { map.states <- subset(map.states,name != "Hawaii") }
       if (region == "EPA Region 10") { map.states <- subset(map.states,name != "Alaska") }
     }
     if (state != "All States") { map.states <- subset(map.states,name == state) }
+  }
+  
+  ## Get site-level design values based on current year data
+  if (dv.year == curr.year) {
+    vals <- temp[,c("site","site_name","address","latitude","longitude",
+      "epa_region","state_name",name.col,val.cols)]
+  }
+  
+  ## Get site-level design values based on historical data
+  if (dv.year < curr.year) {
+    
+    ## Load historical data from file based on naaqs input
+    hist.file <- paste("data",rev(files[grep(paste("hist",std,sep="_"),files)])[1],sep="/")
+    if (!exists(paste("hist",std,sep="."))) { load(hist.file,envir=sys.frame(0)) }
+    hist.data <- eval(parse(text=paste("hist",std,sep=".")))
+    
+    ## Get design values for all sites based on year input
+    dvs <- lapply(hist.data,function(x) x$dv_data[which(x$dv_data$year %in% years),])
+    vals <- data.frame(site=unlist(lapply(hist.data,function(x) x$site)),
+      site_name=unlist(lapply(hist.data,function(x) x$site_name)),
+      address=unlist(lapply(hist.data,function(x) x$address)),
+      latitude=unlist(lapply(hist.data,function(x) x$latitude)),
+      longitude=unlist(lapply(hist.data,function(x) x$longitude)),
+      epa_region=unlist(lapply(hist.data,function(x) x$epa_region)),
+      state_name=unlist(lapply(hist.data,function(x) x$state_name)))
+    if (area.type == "county") { 
+      vals$county_name <- unlist(lapply(hist.data,function(x) x$county_name)) }
+    if (area.type == "cbsa") { 
+      vals$cbsa_name <- unlist(lapply(hist.data,function(x) x$cbsa_name)) }
+    if (area.type == "csa") { 
+      vals$csa_name <- unlist(lapply(hist.data,function(x) x$csa_name)) }
+    if (area.type == "naa") { 
+      vals$naa_name <- unlist(lapply(hist.data,function(x) x$naa_name)) }
+    vals[,val.cols[1]] <- unlist(lapply(dvs,function(x) x$dv[3]))
+    vals[,val.cols[2]] <- unlist(lapply(dvs,function(x) x$max4[1]))
+    vals[,val.cols[3]] <- unlist(lapply(dvs,function(x) x$max4[2]))
+    vals[,val.cols[4]] <- unlist(lapply(dvs,function(x) x$max4[3]))
+    if (grepl("dv",value)) {
+      dv.status <- unlist(lapply(dvs,function(x) x$status[3]))
+      vals[,val.cols[1]] <- mapply(function(dv,status) ifelse(status == "I",NA,dv),
+        dv=vals[,val.cols[1]],status=dv.status)
+    }
+    pct3yr <- unlist(lapply(dvs,function(x) x$pct3yr[3]))
+    vals <- vals[which(!is.na(pct3yr)),]
   }
   
   ## Get design values and polygons for area-level maps
@@ -92,8 +128,8 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
         area.shape <- subset(map.data$csa.shape,fips %in% area.info$fips)
       }
       if (area.type == "naa") {
-        area.info <- naa.info[match(vals$naa_name,naa.info$name),]
-        area.shape <- subset(naa.shape,fips %in% area.info$fips)
+        area.info <- naa.dbf[match(vals$naa_name,naa.dbf$name),]
+        area.shape <- subset(naa.shp,fips %in% area.info$fips)
       }
     }
     assign("map.shape",SpatialPolygonsDataFrame(SpatialPolygons(
@@ -122,8 +158,8 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
       area.shape <- subset(map.data$csa.shape,fips %in% area.info$fips)
     }
     if (area.type == "naa") {
-      area.info <- naa.info[match(vals$naa_name,naa.info$name),]
-      area.shape <- subset(naa.shape,fips %in% area.info$fips)
+      area.info <- naa.dbf[match(vals$naa_name,naa.dbf$name),]
+      area.shape <- subset(naa.shp,fips %in% area.info$fips)
     }
   }
   
@@ -143,8 +179,8 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
       area.shape <- subset(map.data$csa.shape,fips == area.info$fips)
     }
     if (area.type == "naa") {
-      area.info <- subset(naa.info,name == out)
-      area.shape <- subset(naa.shape,fips == area.info$fips)
+      area.info <- subset(naa.dbf,name == out)
+      area.shape <- subset(naa.shp,fips == area.info$fips)
     }
   }
   
@@ -192,13 +228,12 @@ area.maps <- function(naaqs,type,geo,region,state,out,value) {
     na.col=ifelse(dv.type == "area","#C0C0C0","#FFFFFF"))
   
   ## Create legend label and figure title
-  value.lab <- ifelse(substr(value,1,2) == "dv",
+  value.lab <- ifelse(substr(value,1,2) == "dv",ifelse(dv.year == curr.year,
     paste("Preliminary",years[1],"-",years[3],"Design Value"),
+    paste(years[1],"-",years[3],"Design Value")),
     paste(substr(value,6,9),"4th Highest Daily Maximum Value"))
-  update.date <- format(as.POSIXlt(gsub("sitedv_","",gsub(".Rdata","",
-    rev(files[grep("sitedv",files)])[1])),format="%Y%m%d"),"%B %d, %Y")
-  legend.lab <- ifelse(grepl(years[3],value),paste(value.lab,"(ppb) as of",
-    update.date),paste(value.lab,"(ppb)"))
+  legend.lab <- ifelse(grepl(curr.year,value),paste(value.lab,"(ppb) as of",
+    word.date),paste(value.lab,"(ppb)"))
   title1 <- paste(value.lab,"s for the ",std," Ozone NAAQS (",lvl," ppb)",sep="")
   title2 <- ifelse(dv.type == "area",paste("by",area.title),ifelse(local.map,
     paste("in",out,ifelse(area.type == "county",paste("County,",state),"")),
