@@ -15,10 +15,8 @@ max4.plot <- function(naaqs,geo,state,out) {
   title2 <- paste(std," Ozone NAAQS (",lvl," ppb)",sep="")
   
   ## Get current year and historical data based on naaqs input
-  curr.file <- paste("data",rev(files[grep("daily",files)])[1],sep="/")
-  hist.file <- paste("data",rev(files[grep(paste("hist",std,sep="_"),files)])[1],sep="/")
-  if (!exists(paste("curr",std,sep="."))) { load(curr.file,envir=sys.frame(0)) }
-  if (!exists(paste("hist",std,sep="."))) { load(hist.file,envir=sys.frame(0)) }
+  if (!exists(paste("hist",std,sep="."))) { assign(paste("hist",std,sep="."),
+    pin_read(board,name=paste(Sys.getenv("app_owner"),"/OzoneWatch_hist",std,sep="")),envir=sys.frame(0)) }
   curr.data <- eval(parse(text=paste("curr",std,sep=".")))
   hist.data <- eval(parse(text=paste("hist",std,sep=".")))
   

@@ -1,7 +1,7 @@
 ##########################################################
 ## Server function for the Ozone Watch R shiny application
 ##########################################################
-shinyServer(function(input,output) {
+shinyServer(function(input,output,session) {
   
   #######################################################################
   ## Logic controlling reactive drop-down menus in the left-hand UI panel
@@ -11,9 +11,9 @@ shinyServer(function(input,output) {
   output$ui.type <- renderUI({
     if (is.null(input$app.select)) { return() }
     if (!input$app.select %in% c("Design Value Tables","Design Value Maps")) { return() }
-    radioButtons(inputId="type.select",label=NULL,
+    radioButtons(inputId="type.select",label=h5(strong("Select a Data Type:")),
       choices=c("Area-level Design Values","Site-level Design Values"),
-      selected="Area-level Design Values")
+      selected="Area-level Design Values",width="100%")
   })
   
   ## Create a geography selection input
@@ -24,8 +24,8 @@ shinyServer(function(input,output) {
     if (input$app.select %in% c("Design Value Tables","Design Value Maps")) {
       geo.choices <- geo.choices[geo.choices != "AQS Site ID"]
     }
-    selectInput(inputId="geo.select",label="Select a Geographic Area Type:",
-      choices=geo.choices,selected="Nonattainment Area (NAA)")
+    selectInput(inputId="geo.select",label=h5(strong("Select a Geographic Area Type:")),
+      choices=geo.choices,selected="Nonattainment Area (NAA)",width="100%")
   })
   
   ## Create a state selection input
@@ -39,9 +39,9 @@ shinyServer(function(input,output) {
         epa_region == substr(input$region.select,12,13),c("epa_region","state_name"))
       state.choices <- unique(sites$state_name)
     }
-    selectInput(inputId="state.select",label="Select a State:",
+    selectInput(inputId="state.select",label=h5(strong("Select a State:")),
       choices=c("All States",state.choices),
-      selected="All States")
+      selected="All States",width="100%")
   })
   
   ## Create an area-specific or site-specific selection input
@@ -109,8 +109,9 @@ shinyServer(function(input,output) {
     }
     out.default <- ifelse(input$app.select %in% c("Design Value Tables","Design Value Maps"),
       "All Sites","Please Make a Selection!")
-    selectInput(inputId="out.select",label=out.label,
-      choices=c(out.default,out.choices),selected=out.default)
+    selectInput(inputId="out.select",label=h5(strong(out.label)),
+      choices=c(out.default,out.choices),
+      selected=out.default,width="100%")
   })
   
   ## Select which years to display in the Design Value Maps and Tables applications
@@ -119,8 +120,8 @@ shinyServer(function(input,output) {
     if (!input$app.select %in% c("Design Value Tables","Design Value Maps")) { return() }
     year.choices <- c(curr.year:(curr.year-10))
     names(year.choices) <- paste(year.choices-2,year.choices,sep=" - ")
-    selectInput(inputId="year.select",label="Select which years to display:",
-      choices=year.choices,selected=year.choices[1])
+    selectInput(inputId="year.select",label=h5(strong("Select Years:")),
+      choices=year.choices,selected=year.choices[1],width="100%")
   })
   
   ## Select which values to display in the "Design Value Maps" application
@@ -134,8 +135,8 @@ shinyServer(function(input,output) {
       paste("Preliminary",years[1],"-",years[3],"Design Value"),
       paste(years[1],"-",years[3],"Design Value")),
       paste(years,"4th Highest Daily Maximum Value"))
-    selectInput(inputId="value.select",label="Select which values to display:",
-      choices=val.choices,selected=val.choices[1])
+    selectInput(inputId="value.select",label=h5(strong("Select which values to display:")),
+      choices=val.choices,selected=val.choices[1],width="100%")
   })
   
   ## Choose how area 4th maxes are displayed in the "Design Value Tables" Application
@@ -144,10 +145,78 @@ shinyServer(function(input,output) {
     if (input$app.select != "Design Value Tables") { return() }
     if (is.null(input$type.select)) { return() }
     if (input$type.select == "Site-level Design Values") { return() }
-    radioButtons(inputId="maxes.select",label="Area 4th Highest Values based on:",
+    radioButtons(inputId="maxes.select",label=h5(strong("Area 4th Highest Values based on:")),
       choices=c("Site with Highest Design Value","Site with Highest Annual Value"),
-      selected="Site with Highest Design Value")
+      selected="Site with Highest Design Value",width="100%")
   })
+  
+  #######################################################
+  ## Logic controlling the 'Go!' and 'View Intro' buttons
+  #######################################################
+  ## Create reactive values that change whenever 'Go!' and 'View Intro' buttons are clicked
+  vals <- reactiveValues(reset.dvtables=TRUE,reset.areamaps=TRUE, 
+    reset.dvtrends=TRUE,reset.tileplot=TRUE,reset.max4plot=TRUE)
+  
+  ## Change reset value to FALSE whenever 'Go!' button is clicked
+  observeEvent(input$go.dvtables, { if (input$go.dvtables > 0) { vals$reset.dvtables <- FALSE } })
+  observeEvent(input$go.areamaps, { if (input$go.areamaps > 0) { vals$reset.areamaps <- FALSE } })
+  observeEvent(input$go.dvtrends, { if (input$go.dvtrends > 0) { vals$reset.dvtrends <- FALSE } })
+  observeEvent(input$go.tileplot, { if (input$go.tileplot > 0) { vals$reset.tileplot <- FALSE } })
+  observeEvent(input$go.max4plot, { if (input$go.max4plot > 0) { vals$reset.max4plot <- FALSE } })
+  
+  ## Reset menus and return to intro screen whenever 'View Intro' button is clicked
+  observeEvent(input$reset.dvtables,{
+    updateRadioButtons(session,inputId="type.select",selected="Area-level Design Values")
+    updateSelectInput(session,inputId="naaqs.select",selected="2015 8-hour (70 ppb)")
+    updateSelectInput(session,inputId="geo.select",selected="Nonattainment Area (NAA)")
+    updateSelectInput(session,inputId="region.select",selected="National")
+    updateSelectInput(session,inputId="state.select",selected="All States")
+    updateSelectInput(session,inputId="year.select",selected=curr.year)
+    updateRadioButtons(session,inputId="maxes.select",selected="Site with Highest Design Value")
+    vals$reset.dvtables <- TRUE
+  })
+  observeEvent(input$reset.areamaps,{
+    updateRadioButtons(session,inputId="type.select",selected="Area-level Design Values")
+    updateSelectInput(session,inputId="naaqs.select",selected="2015 8-hour (70 ppb)")
+    updateSelectInput(session,inputId="geo.select",selected="Nonattainment Area (NAA)")
+    updateSelectInput(session,inputId="region.select",selected="National")
+    updateSelectInput(session,inputId="state.select",selected="All States")
+    updateSelectInput(session,inputId="year.select",selected=curr.year)
+    vals$reset.areamaps <- TRUE
+  })
+  observeEvent(input$reset.dvtrends,{
+    updateSelectInput(session,inputId="naaqs.select",selected="2015 8-hour (70 ppb)")
+    updateSelectInput(session,inputId="geo.select",selected="Nonattainment Area (NAA)")
+    updateSelectInput(session,inputId="region.select",selected="National")
+    updateSelectInput(session,inputId="state.select",selected="All States")
+    vals$reset.dvtrends <- TRUE
+  })
+  observeEvent(input$reset.tileplot,{
+    updateSelectInput(session,inputId="naaqs.select",selected="2015 8-hour (70 ppb)")
+    updateSelectInput(session,inputId="geo.select",selected="Nonattainment Area (NAA)")
+    updateSelectInput(session,inputId="region.select",selected="National")
+    updateSelectInput(session,inputId="state.select",selected="All States")
+    vals$reset.tileplot <- TRUE
+  })
+  observeEvent(input$reset.max4plot,{
+    updateSelectInput(session,inputId="naaqs.select",selected="2015 8-hour (70 ppb)")
+    updateSelectInput(session,inputId="geo.select",selected="Nonattainment Area (NAA)")
+    updateSelectInput(session,inputId="region.select",selected="National")
+    updateSelectInput(session,inputId="state.select",selected="All States")
+    vals$reset.max4plot <- TRUE
+  })
+  
+  ## Allow reset values to be used in conditionalPanel statements in ui.r
+  output$reset.dvtables <- reactive({ return(vals$reset.dvtables) })
+  output$reset.areamaps <- reactive({ return(vals$reset.areamaps) })
+  output$reset.dvtrends <- reactive({ return(vals$reset.dvtrends) })
+  output$reset.tileplot <- reactive({ return(vals$reset.tileplot) })
+  output$reset.max4plot <- reactive({ return(vals$reset.max4plot) })
+  outputOptions(output,"reset.dvtables",suspendWhenHidden=FALSE)
+  outputOptions(output,"reset.areamaps",suspendWhenHidden=FALSE)
+  outputOptions(output,"reset.dvtrends",suspendWhenHidden=FALSE)
+  outputOptions(output,"reset.tileplot",suspendWhenHidden=FALSE)
+  outputOptions(output,"reset.max4plot",suspendWhenHidden=FALSE)
   
   #############################################################
   ## Logic controlling download links in the left-hand UI panel
@@ -156,7 +225,7 @@ shinyServer(function(input,output) {
   ## Download tables from the "Design Value Tables" application as CSV files
   output$download.dvtables <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-    gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
     content=function(file) { write.csv(
       dv.tables(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
         region=input$region.select,state=input$state.select,out=input$out.select,
@@ -166,7 +235,7 @@ shinyServer(function(input,output) {
   ## Download images from the "Design Value Maps" application as PNG files
   output$download.areamaps <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-    gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       area.maps(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
@@ -175,10 +244,20 @@ shinyServer(function(input,output) {
       dev.off()
   })
   
+  ## Download data from the "Design Value Maps" application as CSV files
+  output$table.areamaps <- downloadHandler(
+    filename=function() { return(paste("Ozone_Watch_",
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+    content=function(file) { write.csv(
+      dv.tables(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
+        region=input$region.select,state=input$state.select,out=input$out.select,
+        year=input$year.select,maxes=input$maxes.select),file,row.names=FALSE,na="")
+  })
+  
   ## Download images from the "Design Value Trends" application as PNG files
   output$download.dvtrends <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-    gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       dv.trends(naaqs=input$naaqs.select,geo=input$geo.select,
@@ -186,10 +265,17 @@ shinyServer(function(input,output) {
       dev.off()
   })
   
+  ## Download data from the "Design Value Trends" application as CSV files
+  output$table.dvtrends <- downloadHandler(
+    filename=function() { return(paste("Ozone_Watch_",
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+    content=function(file) { write.csv(dvtrends.vals,file,row.names=FALSE,na="")
+  })
+  
   ## Download images from the "Daily AQI Tile Plots" application as PNG files
   output$download.tileplot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-    gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       tile.plot(naaqs=input$naaqs.select,geo=input$geo.select,
@@ -197,15 +283,29 @@ shinyServer(function(input,output) {
       dev.off()
   })
   
+  ## Download data from the "Daily AQI Tile Plots" application as CSV files
+  output$table.tileplot <- downloadHandler(
+    filename=function() { return(paste("Ozone_Watch_",
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+    content=function(file) { write.csv(tileplot.vals,file,row.names=FALSE,na="")
+  })
+  
   ## Download images from the "Cumulative 4th Max Plots" application as PNG files
   output$download.max4plot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-    gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       max4.plot(naaqs=input$naaqs.select,geo=input$geo.select,
         state=input$state.select,out=input$out.select)
       dev.off()
+  })
+  
+  ## Download data from the "Cumulative 4th Max Plots" application as CSV files
+  output$table.max4plot <- downloadHandler(
+    filename=function() { return(paste("Ozone_Watch_",
+      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+    content=function(file) { write.csv(max4plot.vals,file,row.names=FALSE,na="")
   })
   
   ####################################################################
@@ -224,21 +324,28 @@ shinyServer(function(input,output) {
       table.out <- dv.tables(naaqs=inputs$naaqs,type=inputs$type,geo=inputs$geo,
         region=inputs$region,state=inputs$state,out=inputs$out,year=inputs$year,
         maxes=inputs$maxes)
-      area.col <- grep("Area",colnames(table.out))-1
-      val.col <- grep("Design Value",colnames(table.out))-1
-      meet.col <- grep("Meets",colnames(table.out))-1
       col.types <- unlist(lapply(table.out,class),use.names=FALSE)
-      col.types[(meet.col+1)] <- "numeric"
       char.cols <- which(col.types == "character")-1
       num.cols <- which(col.types %in% c("integer","numeric"))-1
-      datatable(table.out,
-        options=list(autoWidth=TRUE,info=FALSE,paging=FALSE,searching=FALSE,
-          columnDefs=list(list(width="200px",targets=area.col),
-                          list(width="100px",targets=val.col),
-                          list(width="80px",targets=meet.col),
-                          list(className='dt-left',targets=char.cols),
-                          list(className='dt-center',targets=num.cols))),
-        rownames=FALSE,class="compact hover order-column row-border stripe")
+      if (inputs$type == "Area-level Design Values") {
+        area.col <- ifelse(inputs$geo == "State/County",2,0)
+        val.cols <- setdiff(c(1:ncol(table.out))-1,area.col)
+        num.cols <- append(num.cols,grep("Meets",colnames(table.out))-1)
+        col.defs <- list(list(width="200px",targets=area.col),
+                         list(width="75px",targets=val.cols),
+                         list(className='dt-left',targets=char.cols),
+                         list(className='dt-center',targets=num.cols))
+      }
+      if (inputs$type == "Site-level Design Values") {
+        num.cols <- append(num.cols,grep("Status",colnames(table.out))-1)
+        col.defs <- list(list(width="200px",targets=c(2,8:10)),
+                         list(width="80px",targets=c(0,1,3:7,11:51)),
+                         list(className='dt-left',targets=char.cols),
+                         list(className='dt-center',targets=num.cols))
+      }
+      datatable(table.out,options=list(autoWidth=ifelse(inputs$type == "Area-level Design Values",FALSE,TRUE),
+        columnDefs=col.defs,info=FALSE,paging=FALSE,scrollX=TRUE,scrollY="600px",searching=FALSE),
+        class="compact hover order-column row-border stripe",rownames=FALSE)
     },message="Loading...",value=NULL,detail=NULL)
   })
   

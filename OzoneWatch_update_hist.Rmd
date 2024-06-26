@@ -1,0 +1,728 @@
+---
+title: "OzoneWatch_update_hist"
+author: "Ben Wells"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r label="setup_workspace",echo=FALSE,message=FALSE,warning=FALSE}
+  library(data.table); library(pins); library(plyr);
+  options(stringsAsFactors=FALSE)
+  board <- pins::board_connect()
+  date.stamp <- format(Sys.Date(),"%Y%m%d")
+  year <- as.numeric(substr(date.stamp,1,4))-(as.numeric(substr(date.stamp,5,6)) < 5)
+  years <- c((year-12):(year-1));  ny <- length(years);
+```
+
+```{r label="get_aqs_data",echo=FALSE,message=FALSE,warning=FALSE}
+aqs.userid <- Sys.getenv("AQS_userid")
+aqs.passwd <- Sys.getenv("AQS_passwd")
+get.aqs.data <- function(sql) {
+  require(ROracle)
+  driver <- dbDriver("Oracle")
+  db <- "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db-api.aqs.epa.gov)(PORT=1521))(CONNECT_DATA=(SID=thor)))"
+  con <- dbConnect(driver,username=aqs.userid,password=aqs.passwd,dbname=db)
+  aqs.data <- dbGetQuery(con,sql)
+  colnames(aqs.data) <- tolower(colnames(aqs.data))
+  dbDisconnect(con)
+  return(aqs.data)
+}
+```
+
+```{r label="get_unique_dates",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to get earliest or latest date values by monitor
+## dt = column with date or datetime values
+## id = monitor id variable
+## first = use earliest value (TRUE) or latest value (FALSE)?
+get.unique.dates <- function(dt,id,first) {
+  if (any(dt == " ")) { dt[which(dt == " ")] <- as.character(Sys.Date()) }
+  if (first) { unique.dates <- tapply(dt,list(id),min) }
+  if (!first) { unique.dates <- tapply(dt,list(id),max) }
+  out <- sapply(unique.dates,function(x) ifelse(x == Sys.Date(),
+    " ",as.character(x)))
+  return(out)
+}
+```
+
+```{r label="get_unique_codes",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to get codes associated with most recent begin dates
+## dt = column with date or datetime values
+## id = monitor id variable
+## code = column with code values
+get.unique.codes <- function(dt,id,code) {
+  ids <- unique(id)
+  n <- length(ids)
+  out <- rep(" ",n)
+  for (i in 1:n) {
+    t <- which(id == ids[i])
+    if (length(t) == 1) {
+      out[i] <- code[t]
+      next
+    }
+    if (any(dt[t] == " ")) {
+      j <- which(dt[t] == " ")[1]
+      out[i] <- code[t][j]
+      next
+    }
+    out[i] <- code[t][which.max(as.Date(dt[t]))]
+  }    
+  return(out)
+}
+```
+
+```{r label="get_methods",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to get all method codes associated with a given pollutant
+get.methods <- function(par) {
+  methods <- get.aqs.data(paste("SELECT DISTINCT
+    methods.methodology_code AS method_code,
+    COALESCE(methods.reference_method_id,' ') AS frm_fem_id,
+    COALESCE(methods.sample_anal_desc,' ') AS method_desc,
+    COALESCE(methods.equivalent_method_desc,' ') AS manufacturer,
+    methods.fed_mdl AS mdl
+    FROM sampling_methodologies methods
+   WHERE methods.pa_parameter_code = '",par,"'
+     AND methods.status_ind = 'P'
+   ORDER BY 1",sep=""))
+  methods$mdl <- as.numeric(methods$mdl)*ifelse(par == 44201,1000,1)
+  if (par == 44201) { 
+    ## Fix issue with AIRS legacy FRM method code
+    methods$frm_fem_id[which(methods$method_code == '011')] <- "RFOA-0176-011"
+    methods$manufacturer[which(methods$method_code == '011')] <- "AIRS LEGACY CODE"
+  }
+  return(methods)
+}
+```
+
+```{r label="get_seasons",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to get ozone monitoring seasons for a range of years
+## yr1 = get seasons with begin dates on or after this year
+## yr2 = get seasons with end dates on or before this year
+get.seasons <- function(yr1,yr2) {
+  seasons <- get.aqs.data(paste("SELECT DISTINCT
+        COALESCE(seasons.cn_stt_state_code,' ') as state,
+        COALESCE(seasons.cn_county_code,' ') as county,
+        COALESCE(seasons.site_id,' ') as site_id,
+        COALESCE(seasons.monitoring_season_begin_month,1) as begin_month,
+        COALESCE(seasons.monitoring_season_begin_day,1) as begin_day,
+        COALESCE(seasons.monitoring_season_begin_year,",yr1,") as begin_year,
+        COALESCE(seasons.monitoring_season_end_month,12) as end_month,
+        COALESCE(seasons.monitoring_season_end_day,31) as end_day,
+        COALESCE(seasons.monitoring_season_end_year,",yr2,") as end_year
+   FROM monitoring_seasons seasons
+  WHERE seasons.pa_parameter_code = '44201'
+    AND seasons.monitoring_season_begin_year <= '",yr2,"'
+    AND (seasons.monitoring_season_end_year >= '",yr1,"'
+     OR seasons.monitoring_season_end_year IS NULL)
+    AND seasons.cn_stt_state_code NOT IN ('80','CC')
+  ORDER BY 1,2,3",sep=""))
+  return(seasons)
+}
+```
+
+```{r label="get_monitors",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to retrieve monitor metadata from AQS
+## par = Get monitors with this AQS parameter code
+## yr1 = Get monitors stopping after/during this year
+## yr2 = Get monitors starting before/during this year
+## all = Return all results (TRUE) or unique ids only (FALSE)?
+get.monitors <- function(par,yr1,yr2,all=FALSE) {
+  poll.table <- get.aqs.data(paste("SELECT DISTINCT
+    psids.pollutant_standard_id AS psid,
+    psids.pa_parameter_code AS par,
+    psids.short_description AS standard
+    FROM pollutant_standards psids
+    WHERE psids.pa_parameter_code = '",par,"'
+      AND psids.pollutant_standard_id NOT IN (3,5,6,7,18,21,24)
+    ORDER BY 1,2",sep=""))
+  poll.table$year <- sapply(poll.table$standard,function(x) substr(x,nchar(x)-3,nchar(x)))
+  if (par == 12128) { poll.table$year <- 2009 }
+  if (par == 88101) { poll.table$psid[3] <- 18 }
+  t <- get.aqs.data(paste("SELECT DISTINCT
+    sites.state_code || sites.county_code || sites.site_id || monitors.poc AS id,
+    COALESCE(INITCAP(sites.local_site_name),' ') AS site_name,
+    COALESCE(INITCAP(sites.street_address),' ') AS address,
+    ROUND(COALESCE(sites.standard_latitude,sites.user_latitude),6) AS latitude,
+    ROUND(COALESCE(sites.standard_longitude,sites.user_longitude),6) AS longitude,
+    tz.gmt_diff AS gmt_offset,
+    TO_NUMBER(regions.epa_region_code,'99') AS epa_region,
+    states.state_name AS state_name,
+    counties.county_name AS county_name,
+    COALESCE(TRIM(cbsas.cbsa_name),' ') AS cbsa_name,
+    COALESCE(TRIM(cbsas.csa_title),' ') AS csa_name,",
+    if (nrow(poll.table) > 0) { 
+      paste("COALESCE(
+        (SELECT area_name || ', ' || state_suffix
+           FROM site_naa
+          WHERE sites.si_id = site_naa.si_id(+)
+            AND parameter_code = '",poll.table$par[1],"'
+            AND ps_id = '",poll.table$psid[1],"'),' ')
+        AS naa_name_",poll.table$year[1],",",sep="")
+    },
+    if (nrow(poll.table) > 1) { 
+      paste("COALESCE(
+        (SELECT area_name || ', ' || state_suffix
+           FROM site_naa
+          WHERE sites.si_id = site_naa.si_id(+)
+            AND parameter_code = '",poll.table$par[2],"'
+            AND ps_id = '",poll.table$psid[2],"'),' ')
+        AS naa_name_",poll.table$year[2],",",sep="")
+    },
+    if (nrow(poll.table) > 2) { 
+      paste("COALESCE(
+        (SELECT area_name || ', ' || state_suffix
+           FROM site_naa
+          WHERE sites.si_id = site_naa.si_id(+)
+            AND parameter_code = '",poll.table$par[3],"'
+            AND ps_id = '",poll.table$psid[3],"'),' ')
+        AS naa_name_",poll.table$year[3],",",sep="")
+    },
+    if (nrow(poll.table) > 3) { 
+      paste("COALESCE(
+        (SELECT area_name || ', ' || state_suffix
+           FROM site_naa
+          WHERE sites.si_id = site_naa.si_id(+)
+            AND parameter_code = '",poll.table$par[4],"'
+            AND ps_id = '",poll.table$psid[4],"'),' ')
+        AS naa_name_",poll.table$year[4],",",sep="")
+    },
+    "COALESCE(agencies.agency_desc,' ') AS reporting_agency,
+    COALESCE(INITCAP(monitors.ms_measurement_scale),' ') AS measurement_scale,
+    COALESCE(INITCAP(objectives.mot_monitor_obj_type),' ') AS monitor_objective,
+    COALESCE(TO_CHAR(sp.sampling_begin_date+1/24,'YYYY-MM-DD'),' ') AS monitor_begin_date,
+    COALESCE(TO_CHAR(sp.sampling_end_date+1/24,'YYYY-MM-DD'),' ') AS monitor_end_date,
+    COALESCE(TO_CHAR(monitors.last_sampling_date+1/24,'YYYY-MM-DD'),' ') AS last_sample_date,
+    COALESCE(TO_CHAR(exclusions.begin_date+1/24,'YYYY-MM-DD'),' ') AS nonreg_begin_date,
+    COALESCE(TO_CHAR(exclusions.end_date+1/24,'YYYY-MM-DD'),' ') AS nonreg_end_date,
+    COALESCE(exclusions.concurrence_flag,' ') AS nonreg_concur,
+    COALESCE(methods.method_code,' ') AS method_code,
+    COALESCE(sm.reference_method_id,' ') AS frm_code,
+    COALESCE(TO_CHAR(methods.begin_date+1/24,'YYYY-MM-DD'),' ') AS method_begin_date,
+    COALESCE(TO_CHAR(methods.end_date+1/24,'YYYY-MM-DD'),' ') AS method_end_date,
+    COALESCE(mta.mt_monitor_type,' ') AS monitor_type,
+    COALESCE(TO_CHAR(mta.monitor_type_begin_date+1/24,'YYYY-MM-DD'),' ') AS type_begin_date,
+    COALESCE(TO_CHAR(mta.monitor_type_end_date+1/24,'YYYY-MM-DD'),' ') AS type_end_date,
+    COALESCE(mna.monitor_network_code,' ') AS network,
+    COALESCE(TO_CHAR(mna.begin_date+1/24,'YYYY-MM-DD'),' ') AS network_begin_date,
+    COALESCE(TO_CHAR(mna.end_date+1/24,'YYYY-MM-DD'),' ') AS network_end_date,
+    COALESCE(TO_CHAR(pmp.begin_date+1/24,'YYYY-MM-DD'),' ') AS primary_begin_date,
+    COALESCE(TO_CHAR(pmp.end_date+1/24,'YYYY-MM-DD'),' ') AS primary_end_date,
+    COALESCE(INITCAP(cf.coll_freq_desc),' ') AS collection_frequency,
+    COALESCE(TO_CHAR(rcf.req_coll_freq_begin_date+1/24,'YYYY-MM-DD'),' ') AS frequency_begin_date,
+    COALESCE(TO_CHAR(rcf.req_coll_freq_end_date+1/24,'YYYY-MM-DD'),' ') AS frequency_end_date,
+    COALESCE(combos.second_site_state || combos.second_site_county || 
+      combos.second_site_number,' ') AS combo_site,
+    COALESCE(TO_CHAR(combos.cutover_date+1/24,'YYYY-MM-DD'),' ') AS combo_date,
+    COALESCE(seasons.monitoring_season_begin_year,",yr1,") || '-' ||
+      COALESCE(TO_CHAR(seasons.monitoring_season_begin_month,'FM09'),'01') || '-' ||
+      COALESCE(TO_CHAR(seasons.monitoring_season_begin_day,'FM09'),'01') AS season_begin_date,
+    COALESCE(seasons.monitoring_season_end_year,",yr2,") || '-' ||
+      COALESCE(TO_CHAR(seasons.monitoring_season_end_month,'FM09'),'12') || '-' ||
+      COALESCE(TO_CHAR(seasons.monitoring_season_end_day,'FM09'),'31') AS season_end_date
+  FROM agencies agencies,
+    cbsa_mapping cbsas,
+    collection_frequencies cf,
+    counties counties,
+    epa_regions regions,
+    linked_sites combos,
+    measurement_scales scales,
+    monitor_exclusions exclusions,
+    monitor_methods methods,
+    monitor_networks networks,
+    monitor_network_affiliations mna,
+    monitor_objectives objectives,
+    monitor_objective_types mot,
+    monitor_types types,
+    monitor_type_assignments mta,
+    monitoring_seasons seasons,
+    monitors monitors,
+    primary_monitor_periods pmp,
+    req_coll_frequencies rcf,
+    sample_periods sp,
+    sampling_methodologies sm,
+    site_basic sites,
+    site_time_zone stz,
+    states states,
+    time_zones tz
+  WHERE agencies.agency_code = monitors.monitoring_agency
+    AND methods.method_code = sm.methodology_code
+    AND methods.parameter_code = sm.pa_parameter_code
+    AND mna.monitor_network_code = networks.monitor_network_code(+)
+    AND monitors.mo_id = exclusions.mo_id(+)
+    AND monitors.mo_id = methods.mo_id(+)
+    AND monitors.mo_id = mna.mo_id(+)
+    AND monitors.mo_id = mta.mo_mo_id(+)
+    AND monitors.mo_id = objectives.mo_mo_id(+)
+    AND monitors.mo_id = pmp.mo_id(+)
+    AND monitors.mo_id = rcf.mo_mo_id(+)
+    AND monitors.mo_id = sp.mo_mo_id(+)
+    AND monitors.ms_measurement_scale = scales.measurement_scale(+)
+    AND monitors.si_si_id = sites.si_id
+    AND mta.mt_monitor_type = types.monitor_type(+)
+    AND objectives.mot_monitor_obj_type = mot.monitor_obj_type(+)
+    AND rcf.cf_coll_freq_code = cf.coll_freq_code(+)
+    AND regions.epa_region_code = states.epar_epa_region_code
+    AND sites.county_code = cbsas.county_code(+)
+    AND sites.county_code = counties.county_code
+    AND sites.si_id = combos.first_si_id(+)
+    AND sites.state_code = cbsas.state_code(+)
+    AND sites.state_code = counties.stt_state_code
+    AND sites.state_code = states.state_code
+    AND stz.si_id = sites.si_id
+    AND tz.time_zone_name = stz.time_zone_name
+    AND combos.parameter_code(+) = '",par,"'
+    AND EXTRACT(YEAR FROM combos.cutover_date(+)) >= '",yr1,"'
+    AND EXTRACT(YEAR FROM combos.cutover_date(+)) <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM exclusions.begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM exclusions.end_date(+)),",yr2,") >= '",yr1,"'
+    AND COALESCE(EXTRACT(YEAR FROM methods.begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM methods.end_date(+)),",yr2,") >= '",yr1,"'
+    AND COALESCE(EXTRACT(YEAR FROM mna.begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM mna.end_date(+)),",yr2,") >= '",yr1,"'
+    AND COALESCE(EXTRACT(YEAR FROM monitors.last_sampling_date),",yr2,") >= '",yr1,"'
+    AND monitors.last_sampling_date IS NOT NULL
+    AND monitors.pa_parameter_code = '",par,"'
+    AND monitors.status_ind = 'P'
+    AND COALESCE(EXTRACT(YEAR FROM mta.monitor_type_begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM mta.monitor_type_end_date(+)),",yr2,") >= '",yr1,"'
+    AND COALESCE(EXTRACT(YEAR FROM pmp.begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM pmp.end_date(+)),",yr2,") >= '",yr1,"'
+    AND COALESCE(EXTRACT(YEAR FROM rcf.req_coll_freq_begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM rcf.req_coll_freq_end_date(+)),",yr2,") >= '",yr1,"'
+    AND sites.state_code NOT IN ('80','CC')
+    AND sites.status_ind = 'P'
+    AND sm.pa_parameter_code = '",par,"'
+    AND COALESCE(EXTRACT(YEAR FROM sp.sampling_begin_date(+)),",yr1,") <= '",yr2,"'
+    AND COALESCE(EXTRACT(YEAR FROM sp.sampling_end_date(+)),",yr2,") >= '",yr1,"'
+    AND sites.state_code = seasons.cn_stt_state_code(+)
+    AND (sites.county_code = seasons.cn_county_code",
+        ifelse(par == 44201," OR seasons.cn_county_code IS NULL)","(+))"),"
+    AND (sites.site_id = seasons.site_id",
+        ifelse(par == 44201," OR seasons.site_id IS NULL)","(+))"),"
+    AND COALESCE(seasons.monitoring_season_begin_year(+),",yr1,") <= '",yr2,"'
+    AND COALESCE(seasons.monitoring_season_end_year(+),",yr2,") >= '",yr1,"'
+    AND seasons.pa_parameter_code(+) = '",par,"'
+  ORDER BY 1",sep=""))
+  ## Fix issues with ozone state/county/CBSA/CSA/NAA names, collection frequencies
+  if (par == 44201) {
+    ## Pechanga - shorten ridiculously long name
+    pechanga <- grep("Pechanga",t$naa_name_2015)
+    t$naa_name_2015[pechanga] <- t$naa_name_2008[pechanga] <- t$naa_name_1997[pechanga] <-
+      "Pechanga Band of Luiseno Mission Indians, CA"
+    ## Seaford, DE - Fix naming issue in 2008 shapefile
+    seaford <- grep("Seaford",t$naa_name_2008)
+    t$naa_name_2008[seaford] <- "Seaford, DE"
+    ## New York Metro Area - coastline issues for 1997 NAAQS
+    nyc <- which(substr(t$id,1,5) == "09001")
+    t$naa_name_1997[nyc] <- "New York-N. New Jersey-Long Island Area, NY-NJ-CT"
+    ## Portland, ME - coastline issues for 1997 NAAQS
+    portland <- which(substr(t$id,1,5) == "23031")
+    t$naa_name_1997[portland] <- "Portland Area, ME"
+    ## Fixes to state/county/CBSA/CSA names for Ozone Watch
+    t$state_name <- gsub("Of","of",t$state_name)
+    fix <- which(substr(t$id,1,5) == "72097")
+    if (length(fix) > 0) {
+      t$county_name[fix] <- "Mayaguez"
+      t$cbsa_name[fix] <- "Mayaguez, PR"
+      t$csa_name[fix] <- "Mayaguez-San German, PR"
+    }
+  }
+  if (all) { monitors <- t }
+  if (!all) {
+    monitors <- t[which(!duplicated(t$id)),]
+    first <- paste(c("monitor","nonreg","method","type","network","primary","frequency"),"begin_date",sep="_")
+    last <- paste(c("monitor","nonreg","method","type","network","primary","frequency"),"end_date",sep="_")
+    monitors[,first] <- lapply(t[,first],get.unique.dates,id=t$id,first=TRUE)
+    monitors[,last] <- lapply(t[,last],get.unique.dates,id=t$id,first=FALSE)
+    monitors$last_sample_date <- get.unique.dates(t$last_sample_date,t$id,first=FALSE)
+    monitors$nonreg_concur <- get.unique.codes(t$nonreg_begin_date,t$id,t$nonreg_concur)
+    monitors$method_code <- get.unique.codes(t$method_begin_date,t$id,t$method_code)
+    monitors$frm_code <- get.unique.codes(t$method_begin_date,t$id,t$frm_code)
+    monitors$monitor_type <- get.unique.codes(t$type_begin_date,t$id,t$monitor_type)
+    monitors$network <- get.unique.codes(t$network_begin_date,t$id,t$network)
+    monitors$season_begin_date <- substr(get.unique.codes(t$season_begin_date,t$id,t$season_begin_date),6,10)
+    monitors$season_end_date <- substr(get.unique.codes(t$season_begin_date,t$id,t$season_end_date),6,10)
+  }
+  return(monitors)
+}
+```
+
+```{r label="get_rawdata",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to retrieve hourly AQS criteria pollutant data for one parameter/year
+get.raw.data <- function(par,year) {
+  options(stringsAsFactors=FALSE)
+  poll.name <- switch(paste("p",par,sep=""),p14129="pb",p42101="co",
+    p42401="so2",p42602="no2",p44201="o3",p81102="pm10",p88101="pm25")
+  dt.begin <- ifelse(par == 42101,paste(year-1,"12-31 17:00:00"),
+    paste(year,"01-01 00:00:00",sep="-"))
+  dt.end <- ifelse(par == 44201,paste(year+1,"01-01 06:00:00",sep="-"),
+    paste(year,"12-31 23:00:00",sep="-"))
+  
+  aqs.data <- subset(get.aqs.data(paste("SELECT DISTINCT
+          rd.state_code || rd.county_code || rd.site_id || rd.poc AS id,
+          TO_CHAR(rd.sampling_begin_datetime,'YYYY-MM-DD HH24:MI:SS') AS dt,
+          GREATEST(rd.standard_sample_value,0) AS ",poll.name,",
+          rd.method_code AS method,
+          COALESCE(rd.event_code || rd.null_data_code,' ') AS flag,
+          COALESCE(rd.event_concurence_indicator || rd.null_code_concurrence,' ') AS concur
+     FROM raw_data_concurrences rd
+    WHERE rd.duration_code = '1'
+      AND rd.parameter_code = '",par,"'
+      AND rd.sampling_begin_datetime >= TO_DATE('",dt.begin,"','YYYY-MM-DD HH24:MI:SS')
+      AND rd.sampling_begin_datetime <= TO_DATE('",dt.end,"','YYYY-MM-DD HH24:MI:SS')
+      AND rd.state_code NOT IN ('80','CC')
+    ORDER BY 1,2",sep="")),substr(dt,15,19) == "00:00")
+  if (par == 14129) { aqs.data$pb <- floor(100*aqs.data$pb)/100 }
+  if (par == 42101) { aqs.data$co <- floor(10*aqs.data$co)/10 }
+  if (par == 42401) { aqs.data$so2 <- floor(10*aqs.data$so2)/10 }
+  if (par == 42602) { aqs.data$no2 <- floor(10*aqs.data$no2)/10 }
+  if (par == 44201) { aqs.data$o3 <- floor(aqs.data$o3*1000) }
+  if (par == 81102) { aqs.data$pm10 <- floor(10*aqs.data$pm10)/10 }
+  if (par == 88101) { aqs.data$pm25 <- floor(10*aqs.data$pm25)/10 }
+  
+  ## Fix issue with duplicate concurrence flags in 2022 O3 data
+  if (par == 44201 & year == 2022) {
+    vals.rm <- which(aqs.data$id == "2616300192" & substr(aqs.data$dt,1,10) %in% c("2022-06-24","2022-06-25") & aqs.data$concur == "N")
+    if (length(vals.rm) > 0) { aqs.data <- aqs.data[-vals.rm,] }
+  }
+  
+  all.ids <- as.character(unique(aqs.data$id))
+  all.dts <- unique(aqs.data$dt)[order(unique(aqs.data$dt))]
+  all.hrs <- data.frame(id=rep(all.ids,each=length(all.dts)),
+                        dt=rep(all.dts,times=length(all.ids)))
+  out <- merge(all.hrs,aqs.data,all.x=TRUE,all.y=FALSE)
+  out$method <- replace(out$method,which(is.na(out$method))," ")
+  out$flag <- replace(out$flag,which(is.na(out$flag))," ")
+  out$concur <- replace(out$concur,which(is.na(out$concur))," ")
+  return(out)
+}
+```
+
+```{r label="calc_design_values",echo=FALSE,message=FALSE,warning=FALSE}
+## Custom functions called within the main design.values function
+count <- function(x) { return(sum(!is.na(x))) }
+max.na <- function(x) { return(ifelse(all(is.na(x)),NA,max(x,na.rm=TRUE))) }
+mean.na <- function(x) { return(ifelse(all(is.na(x)),NA,mean(x,na.rm=TRUE))) }
+merge.all <- function(x,y) { merge(x,y,all=TRUE) }
+
+## Function to calculate moving 8-hour averages
+avg8 <- function(x,sub,lvl) {
+  n <- count(x)
+  if (n == 0) { return(NA) }
+  if (n >= 6) { return(mean(x,na.rm=TRUE)) }
+  if (n > 0 & n < 6) {
+    x.sub <- mean(replace(x,which(is.na(x)),sub))
+    return(ifelse(x.sub > lvl,x.sub,NA))
+  }
+}
+
+## Load or retrieve ozone seasons, methods, monitor metadata
+if (pin_exists(board,paste(Sys.getenv("app_owner"),"OzoneWatch_monitors",sep="/"))) {
+  aqs.list <- pin_read(board,paste(Sys.getenv("app_owner"),"OzoneWatch_monitors",sep="/"))
+  methods <- aqs.list$methods; monitors <- aqs.list$monitors; seasons <- aqs.list$seasons;
+}
+if (!pin_exists(board,paste(Sys.getenv("app_owner"),"OzoneWatch_monitors",sep="/"))) {
+  methods <- get.methods(par=44201)
+  monitors <- get.monitors(par=44201,yr1=years[1],yr2=years[ny],all=TRUE)
+  seasons <- get.seasons(yr1=years[1],yr2=years[ny])
+  aqs.list <- list(methods=methods,monitors=monitors,seasons=seasons)
+  pin_write(board,x=aqs.list,name="OzoneWatch_monitors",type="rds",title="OzoneWatch monitor data",
+    description=paste("Last updated on",Sys.Date()),versioned=FALSE)
+}
+
+## Calculate design values for the past ten 3-year periods
+for (y in years) {
+  
+  ## Load pin for current year, if it exists
+  if (pin_exists(board,paste(Sys.getenv("app_owner"),"/OzoneWatch_",y,sep=""))) {
+    aqs.list <- pin_read(board,paste(Sys.getenv("app_owner"),"/OzoneWatch_",y,sep=""))
+    for (naaqs in c("2015","2008","1997")) {
+      daily.obj <- paste("daily",naaqs,y,sep=".")
+      annual.obj <- paste("annual",naaqs,y,sep=".")
+      assign(daily.obj,eval(parse(text=paste("aqs.list['",daily.obj,"'][[1]]",sep=""))))
+      assign(annual.obj,eval(parse(text=paste("aqs.list['",annual.obj,"'][[1]]",sep=""))))
+      if (y > years[2]) {
+        dv.obj <- paste("dvs",naaqs,(y-2),y,sep=".")
+        assign(dv.obj,eval(parse(text=paste("aqs.list['",dv.obj,"'][[1]]",sep=""))))
+      }
+    }
+    next
+  }
+  
+  ## Retrieve hourly O3 concentration data from AQS
+  o3 <- get.raw.data(par=44201,year=y)
+  o3$date <- as.Date(substr(o3$dt,1,10))
+  o3$hour <- as.integer(substr(o3$dt,12,13))
+  
+  ## Remove missing days assumed less than the standard
+  bg <- which(o3$flag == "BG" & o3$concur == "Y")
+  if (length(bg) > 0) { o3$o3[bg] <- -99 }
+  ## Remove concurred exceptional events
+  ee <- which(substr(o3$flag,1,1) %in% c("E","R") & o3$concur == "Y")
+  if (length(ee) > 0) { o3$o3[ee] <- -99 }
+  
+  ## Remove data with non-FEM/FRM method codes
+  non.ref <- methods$method_code[which(methods$frm_fem_id == " ")]
+  if (length(non.ref) > 0) {
+    drop <- which(o3$method %in% non.ref)
+    if (length(drop) > 0) { o3$o3[drop] <- NA }
+  }
+  ## Remove data with concurred NAAQS exclusions
+  nr <- subset(monitors,nonreg_begin_date != " " & nonreg_concur == "Y" &
+    as.numeric(substr(nonreg_begin_date,1,4)) <= y &
+    (as.numeric(substr(nonreg_end_date,1,4)) >= y | nonreg_end_date == " "),
+    select=c("id","nonreg_begin_date","nonreg_end_date"))
+  nr <- nr[which(!duplicated(nr)),]
+  for (i in 1:nrow(nr)) {
+    bd <- as.Date(nr$nonreg_begin_date[i])
+    ed <- ifelse(nr$nonreg_end_date[i] == " ",Sys.Date(),as.Date(nr$nonreg_end_date[i]))
+    drop <- which(o3$id == nr$id[i] & o3$date >= bd & o3$date <= ed)
+    if (length(drop) > 0) { o3$o3[drop] <- NA }
+  }
+  
+  ## Create temporary copies of original datasets
+  td <- o3[,c("id","date","hour","o3")]
+  tm <- monitors; rm(o3); gc();
+  
+  ## Fix issue with multiple site moves in Loudon County, TN
+  if (any(td$id == "4710501081")) { td$id[which(td$id == "4710501081")] <- "4710501091" }
+  
+  ## Combine POCs at sites with multiple monitors
+  sites <- substr(unique(td$id),1,9)
+  combine.sites <- unique(sites[which(duplicated(sites))])
+  td$site <- substr(td$id,1,9); tm$site <- substr(tm$id,1,9);
+  if (length(combine.sites) > 0) {
+    for (i in 1:length(combine.sites)) {
+      if (!combine.sites[i] %in% tm$site) { next }
+      rows <- which(td$site == combine.sites[i]); d <- td[rows,];
+      m <- subset(tm,site == combine.sites[i] & primary_begin_date != " ",
+        select=c("id","primary_begin_date","primary_end_date"))
+      m <- m[which(!duplicated(m)),]; m <- m[order(m$primary_begin_date),];
+      m$bd <- as.Date(m$primary_begin_date)
+      m$ed <- sapply(m$primary_end_date,function(x) ifelse(x == " ",Sys.Date(),as.Date(x)))
+      m <- subset(m,bd < as.Date(paste(y,"12-31",sep="-")) & ed >= as.Date(paste(y,"01-01",sep="-")))
+      n.dts <- length(unique(paste(d$date,d$hour)))
+      site.data <- data.frame(id="",date=d$date[1:n.dts],hour=d$hour[1:n.dts],o3=NA,site=combine.sites[i])
+      for (j in 1:nrow(m)) {
+        site.ind <- which(site.data$date >= m$bd[j] & site.data$date <= m$ed[j])
+        pri.ind <- which(d$id == m$id[j] & d$date >= m$bd[j] & d$date <= m$ed[j])
+        if (length(pri.ind) == 0) { next }
+        site.data$o3[site.ind] <- d$o3[pri.ind]
+        site.sub <- site.ind[which(is.na(site.data$o3[site.ind]))]
+        if (length(site.sub) == 0) { next }
+        t <- subset(d,id != m$id[j] & date >= m$bd[j] & date <= m$ed[j])
+        rep.vals <- floor(apply(matrix(t$o3,ncol=length(unique(t$id))),1,mean.na))
+        site.data$o3[site.sub] <- rep.vals[(site.sub-site.ind[1]+1)]
+      }
+      td[(nrow(td)+1):(nrow(td)+n.dts),] <- site.data
+      td <- td[-c(rows),]
+    }
+  }
+  
+  ## Perform site combinations
+  combos <- subset(tm,combo_site != " ",select=c("site","combo_site","combo_date"))
+  combos <- combos[which(!duplicated(combos)),]
+  if (nrow(combos) > 0) {
+    combos <- combos[order(combos$combo_date),]
+    for (i in 1:nrow(combos)) {
+      cd <- as.Date(combos$combo_date[i])
+      if (cd < as.Date(paste(y,"01-01",sep="-"))) { next }
+      old.site <- combos$site[i]
+      new.site <- tm$site[match(combos$combo_site[i],substr(tm$site,1,9))]
+      old.rows <- which(td$site == old.site)
+      new.rows <- which(td$site == new.site)
+      if (length(old.rows) == 0) { next }
+      if (length(new.rows) == 0) { td$site[old.rows] <- new.site; next; }
+      row.copy <- old.rows[which(td$date[old.rows] < cd)]
+      row.paste <- new.rows[which(td$date[new.rows] < cd)]
+      if (length(row.copy) > 0) {
+        td[row.paste,] <- td[row.copy,]
+        td$site[row.paste] <- new.site
+      }
+      td <- td[-c(old.rows),]
+    }
+  }
+  
+  ## Subset, sort, and format hourly ozone data, monitor metadata, seasons
+  obs <- tapply(td$o3,list(td$site),count)
+  td <- subset(td,site %in% names(obs[obs > 0]) & site %in% unique(tm$site))
+  td <- td[order(td$site,td$date,td$hour),c("site","date","hour","o3")]
+  tm <- subset(tm,!duplicated(site) & site %in% unique(td$site))
+  tm <- tm[order(tm$site),c(ncol(tm),2:(ncol(tm)-1))]
+  ts <- subset(seasons,begin_year <= y & end_year >= y)
+  
+  ## Calculate daily and annual summary statistics for each NAAQS
+  dates <- seq(from=as.Date(paste(y,"01-01",sep="-")),to=as.Date(paste(y,"12-31",sep="-")),by=1)
+  n <- 24*length(dates)+7
+  for (a in c("U","P","I")) {
+    temp.daily <- vector("list",nrow(tm))
+    temp.annual <- data.frame(site=tm$site,matrix(NA,nrow=nrow(tm),ncol=14,dimnames=list(c(1:nrow(tm)),
+      c("valid","req","pct","exc",paste(rep(c("max","date"),each=5),rep(c(1:5),times=2),sep="")))))
+    level <- switch(a,U=70,P=75,I=84)
+    naaqs <- switch(a,U="2015",P="2008",I="1997")
+    req.obs <- ifelse(a == "U",13,18)
+    s <- 1
+    for (m in 1:nrow(tm)) {
+      ## Calculate daily max 8-hour values
+      t <- td[c(s:(s+n-1)),]
+      t8 <- matrix(c(t$o3[1:(n-7)],t$o3[2:(n-6)],t$o3[3:(n-5)],t$o3[4:(n-4)],
+        t$o3[5:(n-3)],t$o3[6:(n-2)],t$o3[7:(n-1)],t$o3[8:n]),nrow=n-7,ncol=8)
+      ma8 <- matrix(apply(t8,1,avg8,sub=ifelse(a == "U",0,2),lvl=level),nrow=24)
+      obs <- apply(ma8[c(ifelse(a == "U",8,1):24),],2,count)
+      if (any(t$o3 < 0,na.rm=TRUE)) { ## Remove concurred exceptional events
+        t$o3[which(t$o3 < 0)] <- NA
+        t8 <- matrix(c(t$o3[1:(n-7)],t$o3[2:(n-6)],t$o3[3:(n-5)],t$o3[4:(n-4)],
+          t$o3[5:(n-3)],t$o3[6:(n-2)],t$o3[7:(n-1)],t$o3[8:n]),nrow=n-7,ncol=8)
+        ma8 <- matrix(apply(t8,1,avg8,sub=ifelse(a == "U",0,2),lvl=level),nrow=24)
+      }
+      dmax <- apply(ma8[c(ifelse(a == "U",8,1):24),],2,max.na)
+      temp.daily[[m]] <- data.frame(site=rep(tm$site[m],length(dates)),date=dates,obs,dmax)
+      s <- s + n
+      
+      ## Calculate annual summary statistics
+      t <- temp.daily[[m]]
+      sr <- tail(intersect(which(ts$state == substr(tm$site[m],1,2)),
+        intersect(which(ts$county %in% c(" ",substr(tm$site[m],3,5))),
+        which(ts$site_id %in% c(" ",substr(tm$site[m],6,9))))),n=1)
+      bd <- as.Date(paste(y,ts$begin_month[sr],ts$begin_day[sr],sep="-"))
+      ed <- as.Date(paste(y,ts$end_month[sr],ts$end_day[sr],sep="-"))
+      season <- which(t$date >= bd & t$date <= ed)
+      valid <- t$obs >= req.obs | floor(t$dmax) > level
+      t$dmax[!valid] <- NA
+      max.ind <- order(t$dmax,decreasing=TRUE)
+      temp.annual$req[m] <- ed - bd + 1
+      temp.annual$valid[m] <- length(intersect(season,which(valid)))
+      for (i in 1:5) {
+        temp.annual[m,paste("max",i,sep="")] <- floor(t$dmax[max.ind][i])
+        temp.annual[m,paste("date",i,sep="")] <- as.character(t$date[max.ind][i])
+      }
+      temp.annual$pct[m] <- floor(100*temp.annual$valid[m]/temp.annual$req[m]+0.5)
+      temp.annual$exc[m] <- sum(floor(t$dmax) > level,na.rm=TRUE)
+    }
+    colnames(temp.annual)[2:15] <- paste(colnames(temp.annual)[2:15],y,sep=".")
+    assign(paste("daily",naaqs,y,sep="."),as.data.frame(rbindlist(temp.daily)))
+    assign(paste("annual",naaqs,y,sep="."),temp.annual)
+    if (y < years[3]) {
+      if (a == "I") {
+        obj <- paste(rep(c("daily","annual"),each=3),rep(c("2015","2008","1997"),times=2),y,sep=".")
+        aqs.list <- eval(parse(text=paste("list(",paste("'",obj,"'=",obj,sep="",collapse=","),")",sep="")))
+        pin_write(board,x=aqs.list,name=paste("OzoneWatch",y,sep="_"),type="rds",title=paste("OzoneWatch",y,"data"),
+          description=paste("Last updated on",Sys.Date()),versioned=FALSE)
+        cat("Year =",y,"Time =",as.character(round(Sys.time())),"\n")
+      }
+      gc(); next; 
+    }
+    
+    ## Merge annual data sets, create design values data.frame
+    t <- merge.all(eval(parse(text=paste("annual",naaqs,(y-2),sep="."))),
+         merge.all(eval(parse(text=paste("annual",naaqs,(y-1),sep="."))),
+                   eval(parse(text=paste("annual",naaqs,y,sep=".")))))
+    temp.dvs <- data.frame(site=t$site,matrix(NA,nrow=nrow(t),ncol=3,
+      dimnames=list(c(1:nrow(t)),c("dv","code","pct"))))
+    for (m in 1:nrow(t)) {
+      pct <- as.numeric(t[m,paste("pct",c((y-2):y),sep=".")])
+      pct <- replace(pct,which(is.na(pct)),0)
+      temp.dvs$pct[m] <- floor(mean(pct)+0.5)
+      max4 <- as.numeric(t[m,paste("max4",c((y-2):y),sep=".")])
+      temp.dvs$dv[m] <- floor(mean(max4))
+      temp.dvs$code[m] <- ifelse(is.na(temp.dvs$dv[m]),"I",ifelse(temp.dvs$dv[m] > level,"V",
+        ifelse(min(pct) >= 75 & temp.dvs$pct[m] >= 90,"A","I")))
+    }
+    colnames(temp.dvs)[2:4] <- paste(colnames(temp.dvs)[2:4],(y-2),y,sep=".")
+    assign(paste("dvs",naaqs,(y-2),y,sep="."),temp.dvs)
+  }
+  if (y > years[2]) {
+    obj <- paste(rep(c("daily","annual"),each=3),rep(c("2015","2008","1997"),times=2),y,sep=".")
+    obj <- c(obj,paste("dvs",c("2015","2008","1997"),(y-2),y,sep="."))
+    aqs.list <- eval(parse(text=paste("list(",paste("'",obj,"'=",obj,sep="",collapse=","),")",sep="")))
+    pin_write(board,x=aqs.list,name=paste("OzoneWatch",y,sep="_"),type="rds",title=paste("OzoneWatch",y,"data"),
+      description=paste("Last updated on",Sys.Date()),versioned=FALSE)
+    cat("Year =",y,"Time =",as.character(round(Sys.time())),"\n"); gc();
+  }
+}
+```
+
+```{r label="output_design_values",echo=FALSE,message=FALSE,warning=FALSE}
+## Function to create a time-series of the cumulative 4th highest value
+max4.cum <- function(x) {
+  n <- length(x)
+  out <- rep(NA,n)
+  for (i in 4:n) {
+    t <- x[1:i]
+    out[i] <- t[order(t,decreasing=TRUE)][4]
+  }
+  return(floor(out))
+}
+
+## Create output pins for each NAAQS
+for (naaqs in c("2015","2008","1997")) {
+  ## Combine daily data objects, format for final list output
+  daily.obj <- lapply(paste("daily",naaqs,years,sep="."),get,envir=sys.frame(sys.nframe()))
+  daily <- Reduce(rbind,daily.obj)
+  daily <- daily[order(daily$site,daily$date),]
+  daily$date <- as.character(daily$date)
+  daily$year <- substr(daily$date,1,4)
+  daily.data <- ddply(daily,c("site","year"),summarize,day=substr(date,6,10),dmax=floor(dmax))
+  site.vals <- split(daily.data,daily.data$site)
+  
+  ## Prep sites data.frame for final list output
+  monitors$site <- substr(monitors$id,1,9)
+  tm <- subset(monitors,!duplicated(site) & site %in% unique(daily$site))
+  naa.col <- paste("naa_name",naaqs,sep="_")
+  sites <- data.frame(tm[,c("site","site_name","address","latitude","longitude",
+    "epa_region","state_name","county_name","cbsa_name","csa_name",naa.col)])
+  
+  ## Combine monitor metadata, DVs, annual summaries into one object
+  annual.list <- lapply(paste("annual",naaqs,years,sep="."),
+    get,envir=sys.frame(sys.nframe()))
+  dv.suff <- paste(c(years[1]:years[ny-2]),c(years[3]:years[ny]),sep=".")
+  dv.list <- lapply(paste("dvs",naaqs,dv.suff,sep="."),
+    get,envir=sys.frame(sys.nframe()))
+  t1 <- Reduce(merge.all,dv.list)
+  t2 <- Reduce(merge.all,annual.list)
+  dvs <- merge(sites,merge(t1,t2,by="site",all=TRUE),by="site",all=FALSE)
+  cc <- which(lapply(dvs,class) == "character")
+  dvs[,cc] <- sapply(dvs[,cc],function(x) ifelse(is.na(x)," ",x))
+  codes <- grep("code",colnames(dvs))
+  dvs[,codes] <- sapply(dvs[,codes],function(x) ifelse(x == " ","I",x))
+  
+  ## Populate historical data list objects for each site
+  level <- ifelse(naaqs == "2015",70,ifelse(naaqs == "2008",75,84))
+  hist.data <- vector("list",length(site.vals))
+  for (i in 1:length(site.vals)) {
+    dvdf <- data.frame(site=rep(dvs$site[i],ny),
+      year=c(years),
+        dv=c(NA,NA,t(dvs[i,grep("dv",colnames(dvs))])),
+    status=c(NA,NA,t(dvs[i,grep("code",colnames(dvs))])),
+    pct3yr=c(NA,NA,t(dvs[i,intersect(grep("pct",colnames(dvs)),which(nchar(colnames(dvs)) == 13))])),
+       pct=c(t(dvs[i,intersect(grep("pct",colnames(dvs)),which(nchar(colnames(dvs)) == 8))])),
+       exc=c(t(dvs[i,grep("exc",colnames(dvs))])),
+     crit1=c(NA,NA,t(pmax(3*(level+1)-dvs[i,grep("max4",colnames(dvs))][1:(ny-2)]-dvs[i,grep("max4",colnames(dvs))][2:(ny-1)],0))),
+     crit2=c(NA,NA,t(pmax(3*(level+1)-dvs[i,grep("max4",colnames(dvs))][2:(ny-1)]-dvs[i,grep("max4",colnames(dvs))][3:ny],0))),
+      max1=c(t(dvs[i,grep("max1",colnames(dvs))])),max2=c(t(dvs[i,grep("max2",colnames(dvs))])),
+      max3=c(t(dvs[i,grep("max3",colnames(dvs))])),max4=c(t(dvs[i,grep("max4",colnames(dvs))])),
+      max5=c(t(dvs[i,grep("max5",colnames(dvs))])),date1=c(t(dvs[i,grep("date1",colnames(dvs))])),
+     date2=c(t(dvs[i,grep("date2",colnames(dvs))])),date3=c(t(dvs[i,grep("date3",colnames(dvs))])),
+     date4=c(t(dvs[i,grep("date4",colnames(dvs))])),date5=c(t(dvs[i,grep("date5",colnames(dvs))])))
+    site.vals[[i]]$max4 <- unlist(tapply(site.vals[[i]]$dmax,list(site.vals[[i]]$year),max4.cum))
+    hist.data[[i]]$site <- sites$site[i]
+    hist.data[[i]]$site_name <- sites$site_name[i]
+    hist.data[[i]]$address <- sites$address[i]
+    hist.data[[i]]$latitude <- sites$latitude[i]
+    hist.data[[i]]$longitude <- sites$longitude[i]
+    hist.data[[i]]$epa_region <- sites$epa_region[i]
+    hist.data[[i]]$state_name <- sites$state_name[i]
+    hist.data[[i]]$county_name <- sites$county_name[i]
+    hist.data[[i]]$cbsa_name <- sites$cbsa_name[i]
+    hist.data[[i]]$csa_name <- sites$csa_name[i]
+    hist.data[[i]]$naa_name <- sites[i,naa.col]
+    hist.data[[i]]$dv_data <- dvdf
+    hist.data[[i]]$daily_data <- site.vals[[i]]
+  }
+  assign(paste("hist",naaqs,sep="."),hist.data)
+  pin_write(board,x=eval(parse(text=paste("hist",naaqs,sep="."))),name=paste("OzoneWatch_hist",naaqs,sep=""),type="rds",
+    title=paste("OzoneWatch -",naaqs,"NAAQS historical data"),description=paste("Last updated on",Sys.Date()),versioned=FALSE)
+}
+## Delete temporary pins with monitor metadata and annual values
+pin_delete(board,names=paste(Sys.getenv("app_owner"),"/OzoneWatch_",c("monitors",(year-1):(year-12)),sep=""))
+cat("Data updated successfully at",as.character(round(Sys.time())))
+```

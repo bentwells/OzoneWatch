@@ -49,9 +49,9 @@ dv.tables <- function(naaqs,type,geo,region,state,out,year,maxes) {
   ## Create DV tables based on historical data
   if (dv.year < curr.year) { 
     
-    ## Load historical data from file based on naaqs input
-    hist.file <- paste("data",rev(files[grep(paste("hist",std,sep="_"),files)])[1],sep="/")
-    if (!exists(paste("hist",std,sep="."))) { load(hist.file,envir=sys.frame(0)) }
+    ## Read historical data from pin based on naaqs input, if needed
+    if (!exists(paste("hist",std,sep="."))) { assign(paste("hist",std,sep="."),
+      pin_read(board,name=paste(Sys.getenv("app_owner"),"/OzoneWatch_hist",std,sep="")),envir=sys.frame(0)) }
     hist.data <- eval(parse(text=paste("hist",std,sep=".")))
     
     ## Subset data based on inputs
@@ -193,6 +193,20 @@ dv.tables <- function(naaqs,type,geo,region,state,out,year,maxes) {
         vals[order(vals[,name.col],vals$site),])
     }
     if (out != "All Sites") { table.out <- vals[order(vals$site),] }
+    colnames(table.out) <- c("AQS Site ID","Site Name","Address","Latitude","Longitude",
+      "EPA Region","State Name","County Name","CBSA Name","CSA Name","NAA Name",
+      paste(ifelse(dv.year == curr.year,"Preliminary",""),years[1],"-",years[3],"Design Value (ppb)"),
+      "Status (A=Attaining, V=Violating, I=Incomplete)",
+      paste(years[1],"-",years[3],"Average Data Completeness (%)"),
+      paste(years[1:3],"Data Completeness (%)"),
+      paste(years[1:3],"Exceedance Days"),
+      paste(years[2:3]+1,"Critical Value (ppb)"),
+      paste(years[1],c("1st","2nd","3rd","4th","5th"),"Max Value (ppb)"),
+      paste(years[2],c("1st","2nd","3rd","4th","5th"),"Max Value (ppb)"),
+      paste(years[3],c("1st","2nd","3rd","4th","5th"),"Max Value (ppb)"),
+      paste(years[1],c("1st","2nd","3rd","4th","5th"),"Max Date"),
+      paste(years[2],c("1st","2nd","3rd","4th","5th"),"Max Date"),
+      paste(years[3],c("1st","2nd","3rd","4th","5th"),"Max Date"))
   }
   
   ## Return DV table
