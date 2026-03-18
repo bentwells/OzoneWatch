@@ -2,7 +2,7 @@
 
 R shiny application developed by Ben Wells, US EPA/OAQPS
 
-Latest Update: June 26, 2024
+Latest Update: March 18, 2026
 
 https://www.epa.gov/outdoor-air-quality-data/ozone-watch
 
