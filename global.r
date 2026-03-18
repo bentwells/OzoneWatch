@@ -9,6 +9,7 @@ require(sf,quietly=TRUE,warn.conflicts=FALSE)
 
 ## Custom functions used in sub-applications
 max.na <- function(x) { return(ifelse(all(is.na(x)),NA,max(x,na.rm=TRUE))) }
+mean.na <- function(x) { return(ifelse(all(is.na(x)),NA,mean(x,na.rm=TRUE))) }
 med.na <- function(x) { return(ifelse(all(is.na(x)),NA,median(x,na.rm=TRUE))) }
 min.na <- function(x) { return(ifelse(all(is.na(x)),NA,min(x,na.rm=TRUE))) }
 cummax.na <- function(x) { 

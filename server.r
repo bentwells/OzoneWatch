@@ -225,7 +225,7 @@ shinyServer(function(input,output,session) {
   ## Download tables from the "Design Value Tables" application as CSV files
   output$download.dvtables <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".csv",sep="")) },
     content=function(file) { write.csv(
       dv.tables(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
         region=input$region.select,state=input$state.select,out=input$out.select,
@@ -235,7 +235,7 @@ shinyServer(function(input,output,session) {
   ## Download images from the "Design Value Maps" application as PNG files
   output$download.areamaps <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       area.maps(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
@@ -247,7 +247,7 @@ shinyServer(function(input,output,session) {
   ## Download data from the "Design Value Maps" application as CSV files
   output$table.areamaps <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".csv",sep="")) },
     content=function(file) { write.csv(
       dv.tables(naaqs=input$naaqs.select,type=input$type.select,geo=input$geo.select,
         region=input$region.select,state=input$state.select,out=input$out.select,
@@ -257,7 +257,7 @@ shinyServer(function(input,output,session) {
   ## Download images from the "Design Value Trends" application as PNG files
   output$download.dvtrends <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       dv.trends(naaqs=input$naaqs.select,geo=input$geo.select,
@@ -268,14 +268,14 @@ shinyServer(function(input,output,session) {
   ## Download data from the "Design Value Trends" application as CSV files
   output$table.dvtrends <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".csv",sep="")) },
     content=function(file) { write.csv(dvtrends.vals,file,row.names=FALSE,na="")
   })
   
   ## Download images from the "Daily AQI Tile Plots" application as PNG files
   output$download.tileplot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       tile.plot(naaqs=input$naaqs.select,geo=input$geo.select,
@@ -286,14 +286,14 @@ shinyServer(function(input,output,session) {
   ## Download data from the "Daily AQI Tile Plots" application as CSV files
   output$table.tileplot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".csv",sep="")) },
     content=function(file) { write.csv(tileplot.vals,file,row.names=FALSE,na="")
   })
   
   ## Download images from the "Cumulative 4th Max Plots" application as PNG files
   output$download.max4plot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".png",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".png",sep="")) },
     content=function(file) {
       png(file,width=960,height=720)
       max4.plot(naaqs=input$naaqs.select,geo=input$geo.select,
@@ -304,7 +304,7 @@ shinyServer(function(input,output,session) {
   ## Download data from the "Cumulative 4th Max Plots" application as CSV files
   output$table.max4plot <- downloadHandler(
     filename=function() { return(paste("Ozone_Watch_",
-      gsub(" ","_",gsub("-","",gsub(":","",Sys.time()))),".csv",sep="")) },
+      gsub(" ","_",gsub("-","",gsub(":","",round(Sys.time())))),".csv",sep="")) },
     content=function(file) { write.csv(max4plot.vals,file,row.names=FALSE,na="")
   })
   
@@ -504,9 +504,13 @@ shinyServer(function(input,output,session) {
     char5 <- paste("4th High Value as of",cdate,"(ppb):")
     char6 <- "Max Design Value Site:"
     char7 <- "Max 4th High Site:"
-    ntab <- ((47 - nchar(c(char1,char2))) %/% 8) + 1
+    char8 <- "Exceedance Days:"
+    char9 <- paste("Exceedance Days as of ",cdate,":",sep="")
+    ntab <- ((47 - nchar(c(char1,char2,char3,char4))) %/% 8) + 1
     char.out <- c(paste(char1,paste(rep("\t",ntab[1]),collapse=""),char6,sep=""),
-      paste(char2,paste(rep("\t",ntab[2]),collapse=""),char7,sep=""),char3,char4,char5)
+      paste(char2,paste(rep("\t",ntab[2]),collapse=""),char7,sep=""),
+      paste(char3,paste(rep("\t",ntab[3]),collapse=""),char8,sep=""),
+      paste(char4,paste(rep("\t",ntab[4]),collapse=""),char9,sep=""),char5)
     if (!this.year) { char.out <- char.out[1:3] }
     if (is.null(input$dvtrends.hover$x)) { return(cat(char.out,sep="\n")) }
     year <- floor(input$dvtrends.hover$x + 0.5)
@@ -517,6 +521,8 @@ shinyServer(function(input,output,session) {
     max4.curr <- dvtrends.vals$max4_curr[row]
     dv.site <- dvtrends.vals$dv_site[row]
     max4.site <- dvtrends.vals$max4_site[row]
+    exc <- dvtrends.vals$exc[row]
+    exc.curr <- dvtrends.vals$exc_curr[row]
     out1 <- paste(char1,ifelse(length(year) > 0,year,""))
     out2 <- paste(char2,ifelse(length(dv) > 0,dv,""))
     out3 <- paste(char3,ifelse(length(max4) > 0,max4,""))
@@ -524,10 +530,15 @@ shinyServer(function(input,output,session) {
     out5 <- paste(char5,ifelse(length(max4.curr) > 0,max4.curr,""))
     out6 <- paste(char6,ifelse(length(dv.site) > 0,dv.site,""))
     out7 <- paste(char7,ifelse(length(max4.site) > 0,max4.site,""))
-    ntab <- ((47 - nchar(c(out1,out2))) %/% 8) + 1
+    out8 <- paste(char8,ifelse(length(exc) > 0,exc,""))
+    out9 <- paste(char9,ifelse(length(exc.curr) > 0,exc.curr,""))
+    ntab <- ((47 - nchar(c(out1,out2,out3,out4))) %/% 8) + 1
     char.out <- c(paste(out1,paste(rep("\t",ntab[1]),collapse=""),out6,sep=""),
-      paste(out2,paste(rep("\t",ntab[2]),collapse=""),out7,sep=""),out3,out4,out5)
+      paste(out2,paste(rep("\t",ntab[2]),collapse=""),out7,sep=""),
+      paste(out3,paste(rep("\t",ntab[3]),collapse=""),out8,sep=""),
+      paste(out4,paste(rep("\t",ntab[4]),collapse=""),out9,sep=""),out5)
     if (!this.year) { char.out <- char.out[1:3] }
+    
     return(cat(char.out,sep="\n"))
   })
   
@@ -538,8 +549,9 @@ shinyServer(function(input,output,session) {
     if (input$go.tileplot == 0) { return(cat("")) }
     char1 <- "Date:"; char2 <- "AQI Value:";
     char3 <- "Daily Max 8-hour Value (ppb):"
+    char4 <- "Daily Max Site ID:"
     if (is.null(input$tileplot.hover$x)) { 
-      return(cat(char1,char2,char3,sep="\n")) 
+      return(cat(char1,char2,char3,char4,sep="\n")) 
     }
     naaqs <- substr(input$naaqs.select,1,4)
     aqi.vals <- c(0,50,100,150,200,300)
@@ -551,6 +563,7 @@ shinyServer(function(input,output,session) {
     col <- year - as.numeric(substr(colnames(tileplot.vals)[2],1,4)) + 2
     date <- paste(tileplot.vals$day[row],year,sep="-")
     ppb.val <- tileplot.vals[row,col]
+    max.site <- tileplot.vals[row,(col+13)]
     aqi.break <- sum(aqi.breaks < ppb.val)
     aqi.val <- round((aqi.vals[(aqi.break + 1)] - aqi.vals[aqi.break]) / 
       (aqi.breaks[(aqi.break + 1)] - aqi.breaks[aqi.break]) *
@@ -558,7 +571,8 @@ shinyServer(function(input,output,session) {
     out1 <- paste(char1,ifelse(length(date) > 0,date,""))
     out2 <- paste(char2,ifelse(length(aqi.val) > 0,aqi.val,""))
     out3 <- paste(char3,ifelse(length(ppb.val) > 0,ppb.val,""))
-    return(cat(out1,out2,out3,sep="\n"))
+    out4 <- paste(char4,ifelse(length(max.site) > 0,max.site,""))
+    return(cat(out1,out2,out3,out4,sep="\n"))
   })
   
   ## Hover to display values in the "Cumulative 4th Max Plots" application
@@ -567,22 +581,31 @@ shinyServer(function(input,output,session) {
     if (input$go.max4plot == 0) { return(cat("")) }
     char1 <- "Date:"
     char2 <- paste(curr.year,"4th Highest Value (ppb):")
-    char3 <- "Historical Minimum 4th High (ppb):"
-    char4 <- "Historical Median 4th High (ppb):"
-    char5 <- "Historical Maximum 4th High (ppb):"
-    if (is.null(input$max4plot.hover$x)) { 
-      return(cat(char1,char2,char3,char4,char5,sep="\n")) 
-    }
+    char3 <- "Minimum 4th Highest Value (ppb):"
+    char4 <- "Median 4th Highest Value (ppb):"
+    char5 <- "Maximum 4th Highest Value (ppb):"
+    char6 <- paste("Exceedance Days in ",curr.year,":",sep="")
+    char7 <- "Average Exceedance Days:"
+    ntab <- ((47 - nchar(c(char2,char3))) %/% 8) + 1
+    char.out <- c(char1,paste(char2,paste(rep("\t",ntab[1]),collapse=""),char6,sep=""),
+      paste(char3,paste(rep("\t",ntab[2]),collapse=""),char7,sep=""),char4,char5)
+    if (is.null(input$max4plot.hover$x)) { return(cat(char.out,sep="\n")) }
     row <- floor(input$max4plot.hover$x + 1)
     day <- format(as.POSIXlt(paste("2000",max4plot.vals$day[row],sep="-")),"%B %d")
     max4.val <- max4plot.vals$max4[row]; min.val <- max4plot.vals$min.val[row];
     med.val <- max4plot.vals$med.val[row]; max.val <- max4plot.vals$max.val[row];
+    obs.val <- max4plot.vals$exc[row]; avg.val <- max4plot.vals$avg.exc[row];
     out1 <- paste(char1,ifelse(length(day) > 0,day,""))
     out2 <- paste(char2,ifelse(length(max4.val) > 0,max4.val,""))
     out3 <- paste(char3,ifelse(length(min.val) > 0,min.val,""))
     out4 <- paste(char4,ifelse(length(med.val) > 0,med.val,""))
     out5 <- paste(char5,ifelse(length(max.val) > 0,max.val,""))
-    return(cat(out1,out2,out3,out4,out5,sep="\n"))
+    out6 <- paste(char6,ifelse(length(obs.val) > 0,obs.val,""))
+    out7 <- paste(char7,ifelse(length(avg.val) > 0,avg.val,""))
+    ntab <- ((47 - nchar(c(out2,out3))) %/% 8) + 1
+    char.out <- c(out1,paste(out2,paste(rep("\t",ntab[1]),collapse=""),out6,sep=""),
+      paste(out3,paste(rep("\t",ntab[2]),collapse=""),out7,sep=""),out4,out5)
+    return(cat(char.out,sep="\n"))
   })
   
   ## Clear global workspace upon exit

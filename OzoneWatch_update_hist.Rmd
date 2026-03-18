@@ -10,7 +10,7 @@ output: html_document
   options(stringsAsFactors=FALSE)
   board <- pins::board_connect()
   date.stamp <- format(Sys.Date(),"%Y%m%d")
-  year <- as.numeric(substr(date.stamp,1,4))-(as.numeric(substr(date.stamp,5,6)) < 5)
+  year <- as.numeric(substr(date.stamp,1,4))-(as.numeric(substr(date.stamp,5,6)) < 4)
   years <- c((year-12):(year-1));  ny <- length(years);
 ```
 
@@ -189,26 +189,26 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
     COALESCE(INITCAP(monitors.ms_measurement_scale),' ') AS measurement_scale,
     COALESCE(INITCAP(objectives.mot_monitor_obj_type),' ') AS monitor_objective,
     COALESCE(TO_CHAR(sp.sampling_begin_date+1/24,'YYYY-MM-DD'),' ') AS monitor_begin_date,
-    COALESCE(TO_CHAR(sp.sampling_end_date+1/24,'YYYY-MM-DD'),' ') AS monitor_end_date,
+    COALESCE(TO_CHAR(sp.sampling_end_date-1/24,'YYYY-MM-DD'),' ') AS monitor_end_date,
     COALESCE(TO_CHAR(monitors.last_sampling_date+1/24,'YYYY-MM-DD'),' ') AS last_sample_date,
     COALESCE(TO_CHAR(exclusions.begin_date+1/24,'YYYY-MM-DD'),' ') AS nonreg_begin_date,
-    COALESCE(TO_CHAR(exclusions.end_date+1/24,'YYYY-MM-DD'),' ') AS nonreg_end_date,
+    COALESCE(TO_CHAR(exclusions.end_date-1/24,'YYYY-MM-DD'),' ') AS nonreg_end_date,
     COALESCE(exclusions.concurrence_flag,' ') AS nonreg_concur,
     COALESCE(methods.method_code,' ') AS method_code,
     COALESCE(sm.reference_method_id,' ') AS frm_code,
     COALESCE(TO_CHAR(methods.begin_date+1/24,'YYYY-MM-DD'),' ') AS method_begin_date,
-    COALESCE(TO_CHAR(methods.end_date+1/24,'YYYY-MM-DD'),' ') AS method_end_date,
+    COALESCE(TO_CHAR(methods.end_date-1/24,'YYYY-MM-DD'),' ') AS method_end_date,
     COALESCE(mta.mt_monitor_type,' ') AS monitor_type,
     COALESCE(TO_CHAR(mta.monitor_type_begin_date+1/24,'YYYY-MM-DD'),' ') AS type_begin_date,
-    COALESCE(TO_CHAR(mta.monitor_type_end_date+1/24,'YYYY-MM-DD'),' ') AS type_end_date,
+    COALESCE(TO_CHAR(mta.monitor_type_end_date-1/24,'YYYY-MM-DD'),' ') AS type_end_date,
     COALESCE(mna.monitor_network_code,' ') AS network,
     COALESCE(TO_CHAR(mna.begin_date+1/24,'YYYY-MM-DD'),' ') AS network_begin_date,
-    COALESCE(TO_CHAR(mna.end_date+1/24,'YYYY-MM-DD'),' ') AS network_end_date,
+    COALESCE(TO_CHAR(mna.end_date-1/24,'YYYY-MM-DD'),' ') AS network_end_date,
     COALESCE(TO_CHAR(pmp.begin_date+1/24,'YYYY-MM-DD'),' ') AS primary_begin_date,
-    COALESCE(TO_CHAR(pmp.end_date+1/24,'YYYY-MM-DD'),' ') AS primary_end_date,
+    COALESCE(TO_CHAR(pmp.end_date-1/24,'YYYY-MM-DD'),' ') AS primary_end_date,
     COALESCE(INITCAP(cf.coll_freq_desc),' ') AS collection_frequency,
     COALESCE(TO_CHAR(rcf.req_coll_freq_begin_date+1/24,'YYYY-MM-DD'),' ') AS frequency_begin_date,
-    COALESCE(TO_CHAR(rcf.req_coll_freq_end_date+1/24,'YYYY-MM-DD'),' ') AS frequency_end_date,
+    COALESCE(TO_CHAR(rcf.req_coll_freq_end_date-1/24,'YYYY-MM-DD'),' ') AS frequency_end_date,
     COALESCE(combos.second_site_state || combos.second_site_county || 
       combos.second_site_number,' ') AS combo_site,
     COALESCE(TO_CHAR(combos.cutover_date+1/24,'YYYY-MM-DD'),' ') AS combo_date,
@@ -302,6 +302,8 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
     AND COALESCE(seasons.monitoring_season_end_year(+),",yr2,") >= '",yr1,"'
     AND seasons.pa_parameter_code(+) = '",par,"'
   ORDER BY 1",sep=""))
+  ## Fix issue where lat/lon coordinates are returned as character fields
+  t$latitude <- as.numeric(t$latitude); t$longitude <- as.numeric(t$longitude);
   ## Fix issues with ozone state/county/CBSA/CSA/NAA names, collection frequencies
   if (par == 44201) {
     ## Pechanga - shorten ridiculously long name
@@ -326,6 +328,10 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
       t$csa_name[fix] <- "Mayaguez-San German, PR"
     }
   }
+  if (par == 88101) {
+    sjv <- grep("San Joaquin",t$naa_name_1997)
+    t$naa_name_1997[sjv] <- "San Joaquin Valley, CA"
+  }
   if (all) { monitors <- t }
   if (!all) {
     monitors <- t[which(!duplicated(t$id)),]
@@ -341,6 +347,8 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
     monitors$network <- get.unique.codes(t$network_begin_date,t$id,t$network)
     monitors$season_begin_date <- substr(get.unique.codes(t$season_begin_date,t$id,t$season_begin_date),6,10)
     monitors$season_end_date <- substr(get.unique.codes(t$season_begin_date,t$id,t$season_end_date),6,10)
+    monitors$season_begin_date[which(monitors$network == "NCORE")] <- "01-01"
+    monitors$season_end_date[which(monitors$network == "NCORE")] <- "12-31"
   }
   return(monitors)
 }
@@ -379,10 +387,13 @@ get.raw.data <- function(par,year) {
   if (par == 81102) { aqs.data$pm10 <- floor(10*aqs.data$pm10)/10 }
   if (par == 88101) { aqs.data$pm25 <- floor(10*aqs.data$pm25)/10 }
   
-  ## Fix issue with duplicate concurrence flags in 2022 O3 data
-  if (par == 44201 & year == 2022) {
-    vals.rm <- which(aqs.data$id == "2616300192" & substr(aqs.data$dt,1,10) %in% c("2022-06-24","2022-06-25") & aqs.data$concur == "N")
-    if (length(vals.rm) > 0) { aqs.data <- aqs.data[-vals.rm,] }
+  ## Fix issue with duplicate exceptional event concurrence indicators
+  if (any(duplicated(aqs.data[,c("id","dt")]))) {
+    dup.ind <- which(duplicated(aqs.data[,c("id","dt")]))
+    dup.ind <- c((dup.ind-1),dup.ind)
+    dup.ind <- dup.ind[order(dup.ind)]
+    vals.rm <- dup.ind[which(aqs.data$concur[dup.ind] == "N")]
+    aqs.data <- aqs.data[-c(vals.rm),]
   }
   
   all.ids <- as.character(unique(aqs.data$id))
@@ -405,13 +416,14 @@ mean.na <- function(x) { return(ifelse(all(is.na(x)),NA,mean(x,na.rm=TRUE))) }
 merge.all <- function(x,y) { merge(x,y,all=TRUE) }
 
 ## Function to calculate moving 8-hour averages
-avg8 <- function(x,sub,lvl) {
-  n <- count(x)
+avg8 <- function(x,lvl) {
+  n <- sum(!is.na(x))
+  sub <- ifelse(lvl > 70,2,0)
   if (n == 0) { return(NA) }
   if (n >= 6) { return(mean(x,na.rm=TRUE)) }
   if (n > 0 & n < 6) {
     x.sub <- mean(replace(x,which(is.na(x)),sub))
-    return(ifelse(x.sub > lvl,x.sub,NA))
+    return(ifelse(floor(x.sub) > lvl,mean(x,na.rm=TRUE),NA))
   }
 }
 
@@ -566,13 +578,13 @@ for (y in years) {
       t <- td[c(s:(s+n-1)),]
       t8 <- matrix(c(t$o3[1:(n-7)],t$o3[2:(n-6)],t$o3[3:(n-5)],t$o3[4:(n-4)],
         t$o3[5:(n-3)],t$o3[6:(n-2)],t$o3[7:(n-1)],t$o3[8:n]),nrow=n-7,ncol=8)
-      ma8 <- matrix(apply(t8,1,avg8,sub=ifelse(a == "U",0,2),lvl=level),nrow=24)
+      ma8 <- matrix(apply(t8,1,avg8,lvl=level),nrow=24)
       obs <- apply(ma8[c(ifelse(a == "U",8,1):24),],2,count)
       if (any(t$o3 < 0,na.rm=TRUE)) { ## Remove concurred exceptional events
         t$o3[which(t$o3 < 0)] <- NA
         t8 <- matrix(c(t$o3[1:(n-7)],t$o3[2:(n-6)],t$o3[3:(n-5)],t$o3[4:(n-4)],
           t$o3[5:(n-3)],t$o3[6:(n-2)],t$o3[7:(n-1)],t$o3[8:n]),nrow=n-7,ncol=8)
-        ma8 <- matrix(apply(t8,1,avg8,sub=ifelse(a == "U",0,2),lvl=level),nrow=24)
+        ma8 <- matrix(apply(t8,1,avg8,lvl=level),nrow=24)
       }
       dmax <- apply(ma8[c(ifelse(a == "U",8,1):24),],2,max.na)
       temp.daily[[m]] <- data.frame(site=rep(tm$site[m],length(dates)),date=dates,obs,dmax)
@@ -653,6 +665,9 @@ max4.cum <- function(x) {
   return(floor(out))
 }
 
+## Function to calculate the cumulative number of exceedance days per year
+cum.exc <- function(x,lvl) { return(cumsum(replace(floor(x),which(is.na(x)),0) > lvl)) }
+
 ## Create output pins for each NAAQS
 for (naaqs in c("2015","2008","1997")) {
   ## Combine daily data objects, format for final list output
@@ -704,6 +719,7 @@ for (naaqs in c("2015","2008","1997")) {
      date2=c(t(dvs[i,grep("date2",colnames(dvs))])),date3=c(t(dvs[i,grep("date3",colnames(dvs))])),
      date4=c(t(dvs[i,grep("date4",colnames(dvs))])),date5=c(t(dvs[i,grep("date5",colnames(dvs))])))
     site.vals[[i]]$max4 <- unlist(tapply(site.vals[[i]]$dmax,list(site.vals[[i]]$year),max4.cum))
+    site.vals[[i]]$exc <- unlist(tapply(site.vals[[i]]$dmax,list(site.vals[[i]]$year),cum.exc,lvl=level))
     hist.data[[i]]$site <- sites$site[i]
     hist.data[[i]]$site_name <- sites$site_name[i]
     hist.data[[i]]$address <- sites$address[i]

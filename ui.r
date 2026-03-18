@@ -11,7 +11,7 @@ intro.text <- function() {
        Quality System (AQS) database, combined with real-time ozone concentration data reported to the
        EPA's AirNow database on days where the data have not yet been submitted to AQS."),
     p("The ozone concentration data for the current ozone season are refreshed each morning, beginning
-       on May 1st and continuing throughout the year. Ozone concentration data for prior years are
+       on April 1st and continuing throughout the year. Ozone concentration data for prior years are
        retrieved from AQS and refreshed on a monthly basis."),
     p(strong("This preliminary data is intended for informational use only. Data and figures obtained
        from Ozone Watch should NOT be used for regulatory or other official purposes.")),
@@ -175,7 +175,9 @@ shinyUI(fluidPage(title="Ozone Watch",
       intro.text(),
       p(strong("Design Value Trends Application")),
       p("This application generates plots showing trends in the ozone design value and 4th highest daily
-         maximum value for a particular geographic area or monitoring site."),
+         maximum value for a particular geographic area or monitoring site. The plots also track the 
+         number of days where the site or one or more sites in the area has measured daily maximum 8-hour
+         ozone concentrations exceeding the NAAQS, also known as 'ozone exceedance days'."),
       p("The menus on the left allow users to choose which ozone NAAQS the values will be compared with,
          to choose which type of geographic area will be assessed in each plot, and to select a specific
          area or monitoring site. The list of options in the final menu can be quite lengthy, so it may
@@ -187,17 +189,19 @@ shinyUI(fluidPage(title="Ozone Watch",
          over the plot with the mouse, and the design value and 4th highest daily maximum value for that
          year will appear in a text box beneath the plot."),
       p("The solid orange line on the plot represents the 4th highest daily maximum value for each year,
-         and the solid blue line on the plot represents the design value for the 3-year period ending in
-         that year. The dotted orange line represents the 4th highest daily maximum value for each year
-         based on only the days on or before the current update. For example, if the date at the top of
-         the screen is June 30th, the line represents the 4th highest value as of June 30th for each year.
-         Over the course of the ozone season, the dotted orange line will move closer to the solid orange
-         line. At the end of the ozone season, the dotted and solid lines will be identical."),
+         the solid blue line on the plot represents the design value for the 3-year period ending in that
+         year, while the solid green line represents the number of ozone exceedance days recorded in each
+         year. The dotted orange line represents the 4th highest daily maximum value for each year based
+         on only the days on or before the current update. For example, if the 'Last Updated:' date shown
+         at the top of the screen is June 30th, the line represents the 4th highest value as of June 30th
+         for each year. Over the course of the ozone season, the dotted orange line will move closer to the
+         solid orange line. At the end of the ozone season, the dotted and solid lines will be identical."),
       p("Similarly, the dotted blue line represents the design value as of the last update for each year.
          This is calculated as the average of the dotted orange line for the current year and the solid
-         orange line for the previous two years. This line will also move closer to the solid blue line
-         as the ozone season progresses. Finally, the solid black line on the plot represents the level
-         of the selected ozone NAAQS.")),
+         orange line for the previous two years. The dotted green line represents the number of ozone
+         exceedance days reported as of the update date in each year. The dotted blue and green lines
+         will also move closer to the solid blue and green lines as the ozone season progresses. Finally,
+         the solid black line on the plot represents the level of the selected ozone NAAQS.")),
     conditionalPanel(condition="input['app.select'] == 'Design Value Trends' & !output['reset.dvtrends']",
       plotOutput("display.dvtrends",height="720px",width="960px",hover="dvtrends.hover")),
     
@@ -241,26 +245,31 @@ shinyUI(fluidPage(title="Ozone Watch",
          example, if the design value for a given area is already close to the level of the NAAQS in May,
          then it is likely that the area will exceed the NAAQS before the end of the year, whereas if an
          area is still well below the NAAQS in September, then that area is unlikely to exceed the NAAQS
-         this year."),
+         this year. The plots also track the number of days where the site or one or more sites in the
+         area has measured daily maximum 8-hour ozone concentrations exceeding the NAAQS, also known as
+         'ozone exceedance days'."),
       p("The menus on the left allow users to choose which ozone NAAQS the values will be compared with,
          to choose which type of geographic area will be assessed in the plot, and to select a specific
          area or monitoring site. The list of options in the final menu can be quite lengthy, so it may
-         be helpful to select an EPA Region and/or State first to shorten the list."),
-      p("Once a selection has been made and the 'Go!' button has been pressed, a plot will appear in this
-         window, and two links will appear beneath the 'Go!' button. The first link allows the user to
-         download the image displayed on the screen as a .png file, and the second link allows the user
-         to download the data displayed in the figure as a .csv file. Additionally, the user may hover
-         over the plot with the mouse, and the 4th highest daily maximum value for the associated day of
-         the year will appear in a text box beneath the plot."),
+         be helpful to select an EPA Region and/or State first to shorten the list. Once a selection has
+         been made and the 'Go!' button has been pressed, a plot will appear in this window, and two links
+         will appear beneath the 'Go!' button. The first link allows the user to download the image
+         displayed on the screen as a .png file, and the second link allows the user to download the data
+         displayed in the figure as a .csv file. Additionally, the user may hover over the plot with the
+         mouse, and the 4th highest daily maximum value and the number ozone exceedance days as of that
+         day of the year will appear in a text box beneath the plot."),
       p("The green line on the plot represents the 4th highest daily maximum value for the area or site
          for each day to-date for the current year, while the blue lines with shaded interior represent
          the historical range of the 4th highest daily maximum value over the past 12 years. This makes
          for an easy comparison of the 4th highest daily maximum value for the current year with historical
          fluctuations. Note that for geographic areas, the green line is based on the highest monitoring
-         site in the area on each day."),
-      p("The dotted black line on each plot represents the level of the selected NAAQS, and the red line
-         represents the 'Critical Value' for that area or site. If the green line reaches or crosses the
-         red line, that means the area or site has exceeded the NAAQS for the current 3-year period.")),
+         site in the area on each day. The fuchsia line on each plot represents the number of ozone
+         exceedance days observed during the current year as of each date, as denoted by the right-hand
+         y-axis, while the orange line represents the average number of ozone exceedance days observed
+         over the past 12 years as of the same date. The dotted black line on each plot represents the
+         level of the selected NAAQS, and the dotted red line represents the 'Critical Value' for that
+         area or site. If the green line reaches or crosses the red line, it means the area or site has
+         exceeded the NAAQS for the current 3-year period.")),
     conditionalPanel(condition="input['app.select'] == 'Cumulative 4th Max Plots' & !output['reset.max4plot']",
       plotOutput("display.max4plot",height="720px",width="960px",hover="max4plot.hover")),
     top="80px",left="25%",height="720px",width="75%"),

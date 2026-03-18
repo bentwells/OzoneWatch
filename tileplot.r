@@ -57,14 +57,23 @@ tile.plot <- function(naaqs,geo,state,out) {
     dates <- seq(from=as.Date(paste(curr.year,"01-01",sep="-")),
       to=as.Date(paste(curr.year,"12-31",sep="-")),by=1)
     temp <- data.frame(site=hist[[1]]$site,year=substr(dates,1,4),
-      day=substr(dates,6,10),dmax=NA,max4=NA)
+      day=substr(dates,6,10),dmax=NA,max4=NA,exc=NA)
+    if (nrow(temp) < 366) { 
+      temp <- rbind(temp[1:59,],temp[59,],temp[60:nrow(temp),])
+      temp$day[60] <- "02-29"
+    }
   }
   if (length(curr) > 0) { temp <- ldply(curr,function(x) rbind(x$daily_data)) }
   if (length(hist) > 0) { temp <- rbind(temp,ldply(hist,function(x) rbind(x$daily_data))) }
   temp <- recast(temp,year + day ~ site + variable,
     id.var=c("site","year","day"),measure.var="dmax")
   temp$dmax <- floor(apply(as.matrix(temp[,grep("dmax",colnames(temp))]),1,max.na))
-  temp <- recast(temp,day ~ year + variable,id.var=c("day","year"),measure.var="dmax")
+  max.site <- apply(as.matrix(temp[,grep("_dmax",colnames(temp))]),1,function(x)
+    ifelse(all(is.na(x)),NA,which.max(x)))
+  temp$max_site <- substr(colnames(temp)[grep("_dmax",colnames(temp))][max.site],1,9)
+  t1 <- recast(temp,day ~ year + variable,id.var=c("day","year"),measure.var="dmax")
+  t2 <- recast(temp,day ~ year + variable,id.var=c("day","year"),measure.var="max_site")
+  temp <- merge(t1,t2,by="day")
   if (nrow(temp) < 366) {
     feb29 <- data.frame(day="02-29",matrix(NA,nrow=1,ncol=ncol(temp)-1))
     colnames(feb29) <- colnames(temp)
@@ -72,10 +81,11 @@ tile.plot <- function(naaqs,geo,state,out) {
   }
   for (y in years) {
     if (length(grep(y,colnames(temp))) == 0) { 
-      temp[,paste(y,"dmax",sep="_")] <- rep(NA,nrow(temp)) 
+      temp[,paste(y,"dmax",sep="_")] <- rep(NA,nrow(temp))
+      temp[,paste(y,"max_site",sep="_")] <- rep(NA,nrow(temp))
     }
   }
-  temp <- temp[,c("day",paste(years,"dmax",sep="_"))]
+  temp <- temp[,c("day",paste(years,"dmax",sep="_"),paste(years,"max_site",sep="_"))]
   assign("tileplot.vals",temp,envir=sys.frame(0))
   
   ## Generate AQI tile plot
@@ -84,8 +94,8 @@ tile.plot <- function(naaqs,geo,state,out) {
     ylim=c(curr.year+0.5,years[1]-0.5),yaxs="i",ylab="",
     main=paste(title1,title2,sep=" - "))
   polygon(x=par("usr")[c(1,2,2,1)],y=par("usr")[c(3,3,4,4)],col="#C0C0C0")
-  image(x=c(0:366),y=years,z=as.matrix(tileplot.vals[,-1]),breaks=aqi.breaks,
-    col=c("#009000","#FFFF00","#FFAA00","#FF0000","#9000AA"),add=TRUE)
+  image(x=c(0:366),y=years,z=as.matrix(tileplot.vals[,grep("_dmax",colnames(tileplot.vals))]),
+    breaks=aqi.breaks,col=c("#009000","#FFFF00","#FFAA00","#FF0000","#9000AA"),add=TRUE)
   x.ticks <- c(0,cumsum(table(substr(tileplot.vals$day,1,2))))
   x.midpt <- x.ticks[1:12] + (x.ticks[2:13]-x.ticks[1:12])/2
   y.ticks <- c(years-0.5,curr.year+0.5)
