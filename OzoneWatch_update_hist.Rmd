@@ -20,7 +20,7 @@ aqs.passwd <- Sys.getenv("AQS_passwd")
 get.aqs.data <- function(sql) {
   require(ROracle)
   driver <- dbDriver("Oracle")
-  db <- "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db-api.aqs.epa.gov)(PORT=1521))(CONNECT_DATA=(SID=thor)))"
+  db <- "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=ncceastdb02-vip.rtpnc.epa.gov)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=aqsprod.ncceastdb02)))"
   con <- dbConnect(driver,username=aqs.userid,password=aqs.passwd,dbname=db)
   aqs.data <- dbGetQuery(con,sql)
   colnames(aqs.data) <- tolower(colnames(aqs.data))
@@ -304,7 +304,7 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
   ORDER BY 1",sep=""))
   ## Fix issue where lat/lon coordinates are returned as character fields
   t$latitude <- as.numeric(t$latitude); t$longitude <- as.numeric(t$longitude);
-  ## Fix issues with ozone state/county/CBSA/CSA/NAA names, collection frequencies
+  ## Fix issues with ozone state/county/CBSA/CSA/NAA names
   if (par == 44201) {
     ## Pechanga - shorten ridiculously long name
     pechanga <- grep("Pechanga",t$naa_name_2015)
@@ -313,20 +313,35 @@ get.monitors <- function(par,yr1,yr2,all=FALSE) {
     ## Seaford, DE - Fix naming issue in 2008 shapefile
     seaford <- grep("Seaford",t$naa_name_2008)
     t$naa_name_2008[seaford] <- "Seaford, DE"
+    ## Allegan County, MI - fix misclassified monitor near county line
+    allegan <- which(substr(t$id,1,5) == "26005")
+    t$naa_name_1997[allegan] <- "Allegan County Area, MI"
     ## New York Metro Area - coastline issues for 1997 NAAQS
     nyc <- which(substr(t$id,1,5) == "09001")
     t$naa_name_1997[nyc] <- "New York-N. New Jersey-Long Island Area, NY-NJ-CT"
     ## Portland, ME - coastline issues for 1997 NAAQS
     portland <- which(substr(t$id,1,5) == "23031")
     t$naa_name_1997[portland] <- "Portland Area, ME"
+    ## Fix Cecil County, MD NAA name
+    cecil <- which(substr(t$id,1,5) == "24015")
+    t$naa_name_2015[cecil] <- t$naa_name_2008[cecil] <- "Cecil County, MD"
+    ## Fix New Castle County, DE NAA name
+    newcastle <- which(substr(t$id,1,5) == "10003")
+    t$naa_name_2015[newcastle] <- t$naa_name_2008[newcastle] <- "New Castle County, DE"
+    ## Fix Philadelphia NAA name for 2015 and 2008 NAAQS
+    phil <- grep("Philadelphia",t$naa_name_2015)
+    t$naa_name_2015[phil] <- t$naa_name_2008[phil] <- "Philadelphia-Wilmington-Atlantic City, PA-NJ"
     ## Fixes to state/county/CBSA/CSA names for Ozone Watch
     t$state_name <- gsub("Of","of",t$state_name)
+    t$csa_name <- gsub("AL-TN","AL",t$csa_name,fixed=TRUE)
     fix <- which(substr(t$id,1,5) == "72097")
     if (length(fix) > 0) {
       t$county_name[fix] <- "Mayaguez"
       t$cbsa_name[fix] <- "Mayaguez, PR"
       t$csa_name[fix] <- "Mayaguez-San German, PR"
     }
+    fix2 <- which(substr(t$id,1,5) == "08101")
+    t$csa_name[fix2] <- "Pueblo-Canyon City, CO"
   }
   if (par == 88101) {
     sjv <- grep("San Joaquin",t$naa_name_1997)

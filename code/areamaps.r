@@ -13,13 +13,22 @@ area.maps <- function(naaqs,type,geo,region,state,out,year,value) {
     if (out == "Please select a State first!") { return() }
   }
   
-  ## Read map data from pin, if needed
+  ## Load map data, if needed
   if (!exists("map.data.20m")) {
-    temp <- pin_read(board,name=paste(Sys.getenv("app_owner"),"OzoneWatch_map_data",sep="/"))
-    assign("map.data.20m",temp$map.data.20m,envir=sys.frame(0)); assign("map.data.500k",temp$map.data.500k,envir=sys.frame(0));
-    assign("naa.dbf.1997",temp$naa.dbf.1997,envir=sys.frame(0)); assign("naa.shp.1997",temp$naa.shp.1997,envir=sys.frame(0));
-    assign("naa.dbf.2008",temp$naa.dbf.2008,envir=sys.frame(0)); assign("naa.shp.2008",temp$naa.shp.2008,envir=sys.frame(0));
-    assign("naa.dbf.2015",temp$naa.dbf.2015,envir=sys.frame(0)); assign("naa.shp.2015",temp$naa.shp.2015,envir=sys.frame(0));
+    if (server.type == "remote") {
+      temp <- pin_read(board,name=paste(Sys.getenv("app_owner"),"OzoneWatch_map_data",sep="/"))
+      assign("map.data.20m",temp$map.data.20m,envir=sys.frame(0)); assign("map.data.500k",temp$map.data.500k,envir=sys.frame(0));
+      assign("naa.dbf.1997",temp$naa.dbf.1997,envir=sys.frame(0)); assign("naa.shp.1997",temp$naa.shp.1997,envir=sys.frame(0));
+      assign("naa.dbf.2008",temp$naa.dbf.2008,envir=sys.frame(0)); assign("naa.shp.2008",temp$naa.shp.2008,envir=sys.frame(0));
+      assign("naa.dbf.2015",temp$naa.dbf.2015,envir=sys.frame(0)); assign("naa.shp.2015",temp$naa.shp.2015,envir=sys.frame(0));
+    }
+    if (server.type == "local") {
+      load("data/map_data_20m.Rdata",envir=sys.frame(0))
+      load("data/map_data_500k.Rdata",envir=sys.frame(0))
+      load("data/O3_naa_1997.Rdata",envir=sys.frame(0))
+      load("data/O3_naa_2008.Rdata",envir=sys.frame(0))
+      load("data/O3_naa_2015.Rdata",envir=sys.frame(0))
+    }
   }
   
   ## Get site-level DVs and set constants based on naaqs input
@@ -71,9 +80,15 @@ area.maps <- function(naaqs,type,geo,region,state,out,year,value) {
   ## Get site-level design values based on historical data
   if (dv.year < curr.year) {
     
-    ## Read historical data from pin based on naaqs input, if needed
-    if (!exists(paste("hist",std,sep="."))) { assign(paste("hist",std,sep="."),
-      pin_read(board,name=paste(Sys.getenv("app_owner"),"/OzoneWatch_hist",std,sep="")),envir=sys.frame(0)) }
+    ## Read historical data based on naaqs input, if needed
+    if (!exists(paste("hist",std,sep="."))) { 
+      if (server.type == "remote") { assign(paste("hist",std,sep="."),
+        pin_read(board,name=paste(Sys.getenv("app_owner"),"/OzoneWatch_hist",std,sep="")),envir=sys.frame(0))
+      }
+      if (server.type == "local") { 
+        load(paste("data/",files[grep(paste("hist",std,sep="_"),files)],sep=""),envir=sys.frame(0))
+      }
+    }
     hist.data <- eval(parse(text=paste("hist",std,sep=".")))
     
     ## Get design values for all sites based on year input

@@ -327,6 +327,7 @@ shinyServer(function(input,output,session) {
       col.types <- unlist(lapply(table.out,class),use.names=FALSE)
       char.cols <- which(col.types == "character")-1
       num.cols <- which(col.types %in% c("integer","numeric"))-1
+      if (is.null(inputs$type)) { return() }
       if (inputs$type == "Area-level Design Values") {
         area.col <- ifelse(inputs$geo == "State/County",2,0)
         val.cols <- setdiff(c(1:ncol(table.out))-1,area.col)

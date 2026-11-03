@@ -42,6 +42,7 @@
 ##   layer added to an existing map, if add=TRUE). If plot=FALSE, a
 ##   data.frame containing information on the geographic areas in 'x'.
 ############################################################################
+
 draw.map <- function(type="state",x,id="fips",add=FALSE,hires=FALSE,
   plot=TRUE,rescale=TRUE,proj.args,...) {
   if (!(tolower(type) %in% c("state","county","cbsa","csa"))) {
