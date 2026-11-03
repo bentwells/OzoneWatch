@@ -1,8 +1,8 @@
 ## OzoneWatch: Real-time Ozone Design Values
 
-R shiny application developed by Ben Wells, US EPA/OAQPS
+R shiny application developed by Ben Wells, US EPA
 
-Latest Update: March 18, 2026
+Latest Update: November 3, 2026
 
 https://www.epa.gov/outdoor-air-quality-data/ozone-watch
 
