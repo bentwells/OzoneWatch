@@ -1,8 +1,8 @@
-####################################################################
-## Ozone Watch: Preliminary ozone design values for the current year
-## Author: Ben Wells, Statistician, US EPA OAQPS/AQAD/AQAG
-## Last Updated: October 20, 2026
-####################################################################
+############################################################
+## Ozone Watch: Current year preliminary ozone design values
+## Author: Ben Wells, Statistician, US EPA OSAP/AQAD/AQAB
+## Last Updated: November 3, 2026
+############################################################
 
 ## Set up working environment
 source("code_dev/get_monitors.r")

@@ -1,8 +1,8 @@
-##########################################################
-## Generate historical datasets used in Ozone Watch
-## Author: Ben Wells, Statistician, US EPA OAQPS/AQAD/AQAG
-## Last Updated: October 28, 2026
-##########################################################
+#########################################################
+## Generate historical datasets used in Ozone Watch app
+## Author: Ben Wells, Statistician, US EPA OSAP/AQAD/AQAB
+## Last Updated: November 3, 2026
+#########################################################
 
 ## Set up working environment
 source("code_dev/get_monitors.r")
