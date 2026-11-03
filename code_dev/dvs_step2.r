@@ -39,10 +39,15 @@ dv.tables <- function(years) {
   load(paste(file.base,"URC70.Rdata",sep="_")); dv.2015 <- out;
   
   ## Retrieve nonattainment area info from AQS
-  naa.1979 <- get.naa.info(par=44201,psid=9)
-  naa.1997 <- get.naa.info(par=44201,psid=10)
-  naa.2008 <- get.naa.info(par=44201,psid=11)
-  naa.2015 <- get.naa.info(par=44201,psid=23)
+  # naa.1979 <- get.naa.info(par=44201,psid=9)
+  # naa.1997 <- get.naa.info(par=44201,psid=10)
+  # naa.2008 <- get.naa.info(par=44201,psid=11)
+  # naa.2015 <- get.naa.info(par=44201,psid=23)
+  ## Workaround due to broken AQS table
+  load("data_dev/Ozone_8-hr_(2015_standard).Rdata"); naa.2015 <- naa.dbf;
+  load("data_dev/Ozone_8-hr_(2008_standard).Rdata"); naa.2008 <- naa.dbf;
+  load("data_dev/Ozone_8-hr_(1997_standard).Rdata"); naa.1997 <- naa.dbf;
+  load("data_dev/Ozone_1-hr_(1979_standard-revoked).Rdata"); naa.1979 <- naa.dbf;
   
   ## Table 0: Monitor metadata
   monitors <- get.monitors(par=44201,yr1=years[1],yr2=years[ny],all=TRUE)
@@ -110,27 +115,30 @@ dv.tables <- function(years) {
   temp[,grep("dv",colnames(temp))] <- mapply(function(dv,code) ifelse(code == "I",NA,dv),
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- tapply(temp[,cur[1]],list(temp$naa_name_2015),max.na)
-  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name),met.naaqs)
-  table1a <- data.frame(naa.2015[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
-    meets_naaqs=meets.naaqs,naa.2015[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
+  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name_2015),met.naaqs)
+  naa <- subset(naa.2015,naa_name %in% temp$naa_name_2015)
+  table1a <- data.frame(naa[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
+    meets_naaqs=meets.naaqs,naa[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
   
   ## Table 1b: 2008 8-hour NAAQS nonattainment area status
   temp <- subset(dv.2008,naa_name_2008 != " ")[,c("naa_name_2008",all)]
   temp[,grep("dv",colnames(temp))] <- mapply(function(dv,code) ifelse(code == "I",NA,dv),
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- tapply(temp[,cur[1]],list(temp$naa_name_2008),max.na)
-  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name),met.naaqs)
-  table1b <- data.frame(naa.2008[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
-    meets_naaqs=meets.naaqs,naa.2008[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
+  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name_2008),met.naaqs)
+  naa <- subset(naa.2008,naa_name %in% temp$naa_name_2008)
+  table1b <- data.frame(naa[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
+    meets_naaqs=meets.naaqs,naa[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
   
   ## Table 1c: 1997 8-hour NAAQS nonattainment area status
   temp <- subset(dv.1997,naa_name_1997 != " ")[,c("naa_name_1997",all)]
   temp[,grep("dv",colnames(temp))] <- mapply(function(dv,code) ifelse(code == "I",NA,dv),
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- tapply(temp[,cur[1]],list(temp$naa_name_1997),max.na)
-  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name),met.naaqs)
-  table1c <- data.frame(naa.1997[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
-    meets_naaqs=meets.naaqs,naa.1997[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
+  meets.naaqs <- tapply(temp[,cur[3]],list(temp$naa_name_1997),met.naaqs)
+  naa <- subset(naa.1997,naa_name %in% temp$naa_name_1997)
+  table1c <- data.frame(naa[,c("naa_name","epa_regions","status","classification")],dv=vals/1000,
+    meets_naaqs=meets.naaqs,naa[,c("cdd_date","redesignation_date")],row.names=c(1:length(vals)))
   
   ## Table 1d: 1979 1-hour NAAQS nonattainment area status
   temp <- subset(dv.1979,naa_name_1979 != " ")[,c("naa_name_1979","epa_region",cur)]
@@ -154,8 +162,8 @@ dv.tables <- function(years) {
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- apply(temp[,grep("dv",colnames(temp))],2,function(x)
     tapply(x,list(temp$naa_name_2015),max.na))
-  table3a <- data.frame(naa.2015[,c("naa_name","epa_regions")],
-    vals/1000,row.names=c(1:nrow(naa.2015)))
+  naa <- subset(naa.2015,naa_name %in% temp$naa_name_2015)
+  table3a <- data.frame(naa[,c("naa_name","epa_regions")],vals/1000,row.names=c(1:nrow(naa)))
   
   ## Table 3b: Trends in 2008 8-hour NAAQS nonattainment areas
   temp <- subset(dv.2008,naa_name_2008 != " ")[,c("naa_name_2008",all)]
@@ -163,8 +171,8 @@ dv.tables <- function(years) {
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- apply(temp[,grep("dv",colnames(temp))],2,function(x)
     tapply(x,list(temp$naa_name_2008),max.na))
-  table3b <- data.frame(naa.2008[,c("naa_name","epa_regions")],
-    vals/1000,row.names=c(1:nrow(naa.2008)))
+  naa <- subset(naa.2008,naa_name %in% temp$naa_name_2008)
+  table3b <- data.frame(naa[,c("naa_name","epa_regions")],vals/1000,row.names=c(1:nrow(naa)))
   
   ## Table 3c: Trends in 1997 8-hour NAAQS nonattainment areas
   temp <- subset(dv.1997,naa_name_1997 != " ")[,c("naa_name_1997",all)]
@@ -172,8 +180,8 @@ dv.tables <- function(years) {
     temp[,grep("dv",colnames(temp))],temp[,grep("code",colnames(temp))])
   vals <- apply(temp[,grep("dv",colnames(temp))],2,function(x)
     tapply(x,list(temp$naa_name_1997),max.na))
-  table3c <- data.frame(naa.1997[,c("naa_name","epa_regions")],vals/1000,
-    row.names=c(1:nrow(naa.1997)))
+  naa <- subset(naa.1997,naa_name %in% temp$naa_name_1997)
+  table3c <- data.frame(naa[,c("naa_name","epa_regions")],vals/1000,row.names=c(1:nrow(naa)))
   
   ## Table 4: County-level design values for the 2015 8-hour NAAQS
   temp <- dv.2015[,c("site","state_name","county_name","epa_region","cbsa_name",cur[1],cur[3])]
