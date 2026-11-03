@@ -40,7 +40,7 @@ design.values <- function(years,method,level,nonreg,ee.type) {
   }
   
   ## Set up working environment
-  source("code_dev/get_monitors.r") }
+  source("code_dev/get_monitors.r")
   options(stringsAsFactors=FALSE); require(data.table);
   ny <- length(years); yr1 <- years[1]; dvyr <- years[ny];
   req.obs <- ifelse(method == "H",9,ifelse(method == "U",13,18))
